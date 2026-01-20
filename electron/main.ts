@@ -314,6 +314,21 @@ app.whenReady().then(() => {
     return { ok: push.ok, error: push.ok ? undefined : push.stderr || push.stdout }
   })
 
+  ipcMain.handle('ide:git-show-file', async (_event, rootPath: string, filePath: string) => {
+    if (!rootPath || !filePath) {
+      return { ok: false, content: '' }
+    }
+    const relativePath = path.relative(rootPath, filePath)
+    if (relativePath.startsWith('..')) {
+      return { ok: false, content: '' }
+    }
+    const show = await runGit(rootPath, ['show', `HEAD:${relativePath}`])
+    if (!show.ok) {
+      return { ok: false, content: '' }
+    }
+    return { ok: true, content: show.stdout }
+  })
+
   ipcMain.handle('ide:search-in-files', async (_event, rootPath: string, query: string) => {
     return searchInFiles(rootPath, query)
   })

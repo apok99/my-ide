@@ -13,6 +13,7 @@ type GitPanelProps = {
   onPull: () => void
   onPush: () => void
   onRefresh: () => void
+  onOpenDiff: (filePath: string) => void
   isElectron: boolean
 }
 
@@ -27,8 +28,17 @@ export function GitPanel({
   onPull,
   onPush,
   onRefresh,
+  onOpenDiff,
   isElectron,
 }: GitPanelProps) {
+  const parsePath = (line: string) => {
+    const payload = line.slice(3)
+    if (payload.includes(' -> ')) {
+      return payload.split(' -> ').pop() ?? payload
+    }
+    return payload
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
@@ -55,8 +65,8 @@ export function GitPanel({
         ) : status?.isRepo ? (
           <div className="flex flex-col gap-3">
             <div className="text-[11px] uppercase tracking-wider text-white/40">Message</div>
-            <input
-              className="w-full rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none"
+            <textarea
+              className="min-h-[72px] w-full resize-none rounded border border-white/10 bg-transparent px-2 py-2 text-xs text-white/80 outline-none"
               placeholder="Commit message"
               value={message}
               onChange={(event) => onMessageChange(event.target.value)}
@@ -93,12 +103,20 @@ export function GitPanel({
               {status.changes.length === 0 ? (
                 <div className="text-white/30">No changes</div>
               ) : (
-                status.changes.slice(0, 200).map((line) => (
-                  <div key={line} className="flex items-center gap-2 text-white/70">
-                    <span className="w-6 text-[10px] text-white/40">{line.slice(0, 2)}</span>
-                    <span className="truncate">{line.slice(3)}</span>
-                  </div>
-                ))
+                status.changes.slice(0, 200).map((line) => {
+                  const filePath = parsePath(line)
+                  return (
+                    <button
+                      type="button"
+                      key={line}
+                      onClick={() => onOpenDiff(filePath)}
+                      className="flex w-full items-center gap-2 text-left text-white/70 hover:text-white"
+                    >
+                      <span className="w-6 text-[10px] text-white/40">{line.slice(0, 2)}</span>
+                      <span className="truncate">{filePath}</span>
+                    </button>
+                  )
+                })
               )}
             </div>
           </div>

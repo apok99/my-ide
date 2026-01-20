@@ -24,5 +24,7 @@ contextBridge.exposeInMainWorld('ide', {
   gitCommit: (rootPath, message) => ipcRenderer.invoke('ide:git-commit', rootPath, message),
   gitPull: (rootPath) => ipcRenderer.invoke('ide:git-pull', rootPath),
   gitPush: (rootPath) => ipcRenderer.invoke('ide:git-push', rootPath),
+  gitShowFile: (rootPath, filePath) =>
+    ipcRenderer.invoke('ide:git-show-file', rootPath, filePath),
   codexCommit: (prompt, cwd) => ipcRenderer.invoke('ide:codex-commit', prompt, cwd),
 })

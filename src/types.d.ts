@@ -33,6 +33,10 @@ declare global {
       ) => Promise<{ ok: boolean; error?: string }>
       gitPull: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
       gitPush: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
+      gitShowFile: (
+        rootPath: string,
+        filePath: string,
+      ) => Promise<{ ok: boolean; content: string }>
       codexCommit: (
         prompt: string,
         cwd?: string,

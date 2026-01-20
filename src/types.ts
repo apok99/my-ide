@@ -12,6 +12,12 @@ export type LoadedFile = {
   dirty: boolean
 }
 
+export type DiffTarget = {
+  filePath: string
+  original: string
+  modified: string
+}
+
 export type SearchResult = {
   filePath: string
   line: number
