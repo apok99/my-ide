@@ -1,0 +1,42 @@
+import type { FileNode } from './types'
+
+declare global {
+  interface Window {
+    ide: {
+      version: string
+      selectFolder: () => Promise<{ rootPath: string; tree: FileNode[] } | null>
+      openFolderByPath: (path: string) => Promise<{ rootPath: string; tree: FileNode[] } | null>
+      openFile: () => Promise<
+        | { filePath: string; content: string; rootPath: string; tree: FileNode[] }
+        | null
+      >
+      readFile: (filePath: string) => Promise<string>
+      writeFile: (filePath: string, content: string) => Promise<boolean>
+      terminalStart: (terminalId: string, cwd?: string) => Promise<boolean>
+      terminalInput: (terminalId: string, data: string) => void
+      terminalResize: (terminalId: string, cols: number, rows: number) => void
+      terminalKill: (terminalId: string) => void
+      onTerminalData: (
+        callback: (terminalId: string, data: string) => void,
+      ) => () => void
+      searchInFiles: (
+        rootPath: string,
+        query: string,
+      ) => Promise<Array<{ filePath: string; line: number; text: string }>>
+      gitStatus: (
+        rootPath: string,
+      ) => Promise<{ isRepo: boolean; clean: boolean; changes: string[] }>
+      gitInit: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
+      gitCommit: (
+        rootPath: string,
+        message: string,
+      ) => Promise<{ ok: boolean; error?: string }>
+      gitPull: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
+      gitPush: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
+      codexCommit: (
+        prompt: string,
+        cwd?: string,
+      ) => Promise<{ ok: boolean; output?: string; error?: string }>
+    }
+  }
+}
