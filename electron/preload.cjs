@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('ide', {
   readFile: (filePath) => ipcRenderer.invoke('ide:read-file', filePath),
   writeFile: (filePath, content) =>
     ipcRenderer.invoke('ide:write-file', filePath, content),
-  terminalStart: (id) => ipcRenderer.invoke('ide:terminal-start', id),
+  terminalStart: (id, cwd) => ipcRenderer.invoke('ide:terminal-start', id, cwd),
   terminalInput: (id, data) => ipcRenderer.send('ide:terminal-input', id, data),
   terminalResize: (id, cols, rows) => ipcRenderer.send('ide:terminal-resize', id, cols, rows),
   terminalKill: (id) => ipcRenderer.send('ide:terminal-kill', id),
@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld('ide', {
   gitPush: (rootPath) => ipcRenderer.invoke('ide:git-push', rootPath),
   gitShowFile: (rootPath, filePath) =>
     ipcRenderer.invoke('ide:git-show-file', rootPath, filePath),
+  gitInfo: (rootPath) => ipcRenderer.invoke('ide:git-info', rootPath),
+  openRemote: (remoteUrl) => ipcRenderer.invoke('ide:open-remote', remoteUrl),
   codexCommit: (prompt, cwd) => ipcRenderer.invoke('ide:codex-commit', prompt, cwd),
 })

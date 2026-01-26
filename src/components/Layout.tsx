@@ -106,7 +106,7 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
                 {activityBar}
 
                 {/* Side Panel (Explorer or Git) */}
-                <aside className="w-[240px] border-r border-white/5 bg-[#0f0f0f]">
+                <aside className="flex h-full w-[240px] flex-col overflow-hidden border-r border-white/5 bg-[#0f0f0f]">
                     {sidePanel}
                 </aside>
 

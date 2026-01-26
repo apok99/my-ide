@@ -25,7 +25,7 @@ declare global {
       ) => Promise<Array<{ filePath: string; line: number; text: string }>>
       gitStatus: (
         rootPath: string,
-      ) => Promise<{ isRepo: boolean; clean: boolean; changes: string[] }>
+      ) => Promise<{ isRepo: boolean; clean: boolean; changes: string[]; error?: string }>
       gitInit: (rootPath: string) => Promise<{ ok: boolean; error?: string }>
       gitCommit: (
         rootPath: string,
@@ -37,6 +37,10 @@ declare global {
         rootPath: string,
         filePath: string,
       ) => Promise<{ ok: boolean; content: string }>
+      gitInfo: (
+        rootPath: string,
+      ) => Promise<{ branch: string; remote: string }>
+      openRemote: (remoteUrl: string) => Promise<{ ok: boolean }>
       codexCommit: (
         prompt: string,
         cwd?: string,

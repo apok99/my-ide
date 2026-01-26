@@ -1,5 +1,5 @@
-import Editor, { type Monaco } from '@monaco-editor/react'
-import type { LoadedFile } from '../../types'
+import Editor, { DiffEditor, type Monaco } from '@monaco-editor/react'
+import type { DiffTarget, LoadedFile } from '../../types'
 
 interface CodeEditorProps {
     openFiles: LoadedFile[]
@@ -9,6 +9,8 @@ interface CodeEditorProps {
     onChange: (value: string | undefined) => void
     onSelectTab: (path: string) => void
     onCloseTab: (path: string) => void
+    diffTarget: DiffTarget | null
+    onCloseDiff: () => void
 }
 
 const languageByExtension: Record<string, string> = {
@@ -37,8 +39,11 @@ export function CodeEditor({
     onChange,
     onSelectTab,
     onCloseTab,
+    diffTarget,
+    onCloseDiff,
 }: CodeEditorProps) {
     const activeFile = openFiles.find((file) => file.path === activeFilePath) ?? null
+
     const handleBeforeMount = (monaco: Monaco) => {
         monaco.editor.defineTheme('vscode-dark', {
             base: 'vs-dark',
@@ -92,6 +97,21 @@ export function CodeEditor({
                                 </button>
                             )
                         })}
+                        {diffTarget ? (
+                            <div className="ml-2 flex items-center gap-2 rounded-md bg-[#252526] px-3 py-1 text-xs text-slate-200">
+                                <span className="opacity-70">Δ</span>
+                                <span className="truncate max-w-[200px]">
+                                    Diff: {diffTarget.filePath.split('/').pop()}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={onCloseDiff}
+                                    className="text-slate-400 hover:text-white"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
                 ) : (
                     <div className="px-4 text-xs italic text-white/20">No active editor</div>
@@ -99,8 +119,24 @@ export function CodeEditor({
             </div>
 
             {/* Editor Surface */}
-            <div className="relative flex-1 overflow-hidden bg-[#1e1e1e]">
-                {activeFile ? (
+            <div className="relative flex-1 min-h-0 overflow-hidden bg-[#1e1e1e]">
+                {diffTarget ? (
+                    <DiffEditor
+                        height="100%"
+                        width="100%"
+                        theme="vscode-dark"
+                        original={diffTarget.original}
+                        modified={diffTarget.modified}
+                        language={getLanguage(diffTarget.filePath)}
+                        beforeMount={handleBeforeMount}
+                        options={{
+                            renderSideBySide: true,
+                            readOnly: false,
+                            automaticLayout: true,
+                            minimap: { enabled: false },
+                        }}
+                    />
+                ) : activeFile ? (
                     <Editor
                         height="100%"
                         width="100%"

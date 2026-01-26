@@ -15,7 +15,8 @@
 
   body {
     margin: 0;
-    min-height: 100vh;
+    height: 100vh;
+    width: 100vw;
     color: #d4d4d4;
     font-family: 'Space Grotesk', 'Poppins', system-ui, sans-serif;
     background-color: var(--bg-primary);
@@ -25,8 +26,8 @@
 
   /* Refined Scrollbars */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
   }
 
   ::-webkit-scrollbar-track {
@@ -34,12 +35,13 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    border: 2px solid var(--bg-primary);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.4);
   }
 }
 

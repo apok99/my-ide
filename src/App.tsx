@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FileItem, FileNode, LoadedFile, SearchResult } from './types'
+import type { DiffTarget, FileItem, FileNode, LoadedFile, SearchResult } from './types'
 import { Layout } from './components/Layout'
 import { FileTree } from './components/FileTree/FileTree'
 import { CodeEditor } from './components/Editor/CodeEditor'
@@ -17,8 +17,12 @@ type ProjectState = {
   openFiles: LoadedFile[]
   openFilePaths: string[]
   activeFilePath: string | null
-  gitStatus: { isRepo: boolean; clean: boolean; changes: string[] } | null
+  gitStatus: { isRepo: boolean; clean: boolean; changes: string[]; error?: string } | null
   gitMessage: string
+  gitBranch: string
+  gitRemote: string
+  gitLog: string | null
+  diffTarget: DiffTarget | null
 }
 
 type PersistedProject = {
@@ -108,6 +112,10 @@ function App() {
         activeFilePath: null,
         gitStatus: null,
         gitMessage: '',
+        gitBranch: '',
+        gitRemote: '',
+        gitLog: null,
+        diffTarget: null,
       },
     ])
     setActiveProjectId(id)
@@ -143,7 +151,7 @@ function App() {
         updateProject(activeProject.id, (project) => {
           const existing = project.openFiles.find((file) => file.path === node.path)
           if (existing) {
-            return { ...project, activeFilePath: node.path }
+            return { ...project, activeFilePath: node.path, diffTarget: null }
           }
           const nextOpenFiles = [
             ...project.openFiles,
@@ -154,6 +162,7 @@ function App() {
             openFiles: nextOpenFiles,
             openFilePaths: nextOpenFiles.map((file) => file.path),
             activeFilePath: node.path,
+            diffTarget: null,
           }
         })
       } finally {
@@ -176,7 +185,7 @@ function App() {
         updateProject(activeProject.id, (project) => {
           const existing = project.openFiles.find((file) => file.path === filePath)
           if (existing) {
-            return { ...project, activeFilePath: filePath }
+            return { ...project, activeFilePath: filePath, diffTarget: null }
           }
           const nextOpenFiles = [
             ...project.openFiles,
@@ -187,6 +196,7 @@ function App() {
             openFiles: nextOpenFiles,
             openFilePaths: nextOpenFiles.map((file) => file.path),
             activeFilePath: filePath,
+            diffTarget: null,
           }
         })
       } finally {
@@ -235,6 +245,10 @@ function App() {
         activeFilePath: result.filePath,
         gitStatus: null,
         gitMessage: '',
+        gitBranch: '',
+        gitRemote: '',
+        gitLog: null,
+        diffTarget: null,
       },
     ])
     setActiveProjectId(id)
@@ -256,6 +270,10 @@ function App() {
         activeFilePath: null,
         gitStatus: null,
         gitMessage: '',
+        gitBranch: '',
+        gitRemote: '',
+        gitLog: null,
+        diffTarget: null,
       },
     ])
     setActiveProjectId(id)
@@ -288,42 +306,112 @@ function App() {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
-    const status = await window.ide.gitStatus(activeProject.rootPath)
-    updateProject(activeProject.id, (project) => ({ ...project, gitStatus: status }))
+    const [status, info] = await Promise.all([
+      window.ide.gitStatus(activeProject.rootPath),
+      window.ide.gitInfo(activeProject.rootPath),
+    ])
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitStatus: status,
+      gitBranch: info.branch,
+      gitRemote: info.remote,
+      gitLog: status.error ? `Git error: ${status.error}` : project.gitLog,
+    }))
   }, [activeProject, updateProject])
 
   const handleGitInit = useCallback(async () => {
-    if (!window.ide || !activeProject?.rootPath) {
+    if (!activeProject) {
       return
     }
-    await window.ide.gitInit(activeProject.rootPath)
+    if (!window.ide || !activeProject.rootPath) {
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: 'Abre una carpeta antes de inicializar Git.',
+      }))
+      return
+    }
+    const result = await window.ide.gitInit(activeProject.rootPath)
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitLog: result.ok ? 'Repositorio inicializado.' : result.error ?? 'Git init fallo.',
+    }))
     handleGitRefresh()
-  }, [activeProject, handleGitRefresh])
+  }, [activeProject, handleGitRefresh, updateProject])
 
   const handleGitCommit = useCallback(async () => {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
     const message = activeProject.gitMessage || 'Update'
-    await window.ide.gitCommit(activeProject.rootPath, message)
+    const result = await window.ide.gitCommit(activeProject.rootPath, message)
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitLog: result.ok ? `Commit creado: ${message}` : result.error ?? 'Commit fallo.',
+    }))
     handleGitRefresh()
-  }, [activeProject, handleGitRefresh])
+  }, [activeProject, handleGitRefresh, updateProject])
 
   const handleGitPull = useCallback(async () => {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
-    await window.ide.gitPull(activeProject.rootPath)
+    const result = await window.ide.gitPull(activeProject.rootPath)
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitLog: result.ok ? 'Pull completado.' : result.error ?? 'Pull fallo.',
+    }))
     handleGitRefresh()
-  }, [activeProject, handleGitRefresh])
+  }, [activeProject, handleGitRefresh, updateProject])
 
   const handleGitPush = useCallback(async () => {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
-    await window.ide.gitPush(activeProject.rootPath)
+    const result = await window.ide.gitPush(activeProject.rootPath)
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitLog: result.ok ? 'Push completado.' : result.error ?? 'Push fallo.',
+    }))
     handleGitRefresh()
-  }, [activeProject, handleGitRefresh])
+  }, [activeProject, handleGitRefresh, updateProject])
+
+  const handleOpenDiff = useCallback(async (filePath: string) => {
+    if (!window.ide || !activeProject?.rootPath) {
+      return
+    }
+    setIsLoading(true)
+    try {
+      const [originalResult, modified] = await Promise.all([
+        window.ide.gitShowFile(activeProject.rootPath, filePath),
+        window.ide.readFile(filePath),
+      ])
+      const original = originalResult.ok ? originalResult.content : ''
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        diffTarget: {
+          filePath,
+          original,
+          modified,
+        },
+      }))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [activeProject, updateProject])
+
+  const handleCloseDiff = useCallback(() => {
+    if (!activeProject) {
+      return
+    }
+    updateProject(activeProject.id, (project) => ({ ...project, diffTarget: null }))
+  }, [activeProject, updateProject])
+
+  const handleOpenRemote = useCallback(async () => {
+    if (!window.ide || !activeProject?.gitRemote) {
+      return
+    }
+    await window.ide.openRemote(activeProject.gitRemote)
+  }, [activeProject])
 
   const handleAutoCommit = useCallback(async () => {
     if (!window.ide || !activeProject?.rootPath) {
@@ -336,6 +424,10 @@ function App() {
         'Haz git add -A, crea un commit con un mensaje claro segun los cambios y haz git push.',
         activeProject.rootPath,
       )
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: result.ok ? 'Auto-commit completado.' : result.error ?? 'Auto-commit fallo.',
+      }))
       if (result.ok) {
         setCodexStatus('Codex completado: commit y push realizados.')
       } else {
@@ -347,7 +439,7 @@ function App() {
       setCodexRunning(false)
       handleGitRefresh()
     }
-  }, [activeProject, handleGitRefresh])
+  }, [activeProject, handleGitRefresh, updateProject])
 
   const handleCodexCommit = useCallback(async () => {
     if (!window.ide) {
@@ -484,6 +576,10 @@ function App() {
         activeFilePath: project.activeFilePath ?? null,
         gitStatus: null,
         gitMessage: '',
+        gitBranch: '',
+        gitRemote: '',
+        gitLog: null,
+        diffTarget: null,
       })),
     )
 
@@ -604,11 +700,10 @@ function App() {
                 key={project.id}
                 type="button"
                 onClick={() => setActiveProjectId(project.id)}
-                className={`group flex items-center gap-2 rounded-t-md border border-white/10 px-3 py-1 text-xs ${
-                  isActive
+                className={`group flex items-center gap-2 rounded-t-md border border-white/10 px-3 py-1 text-xs ${isActive
                     ? 'bg-[#1e1e1e] text-white'
                     : 'bg-[#14161c] text-white/50 hover:text-white/80'
-                }`}
+                  }`}
               >
                 <span className="truncate max-w-[160px]">{name}</span>
                 <span
@@ -654,6 +749,9 @@ function App() {
               <GitPanel
                 rootPath={activeProject?.rootPath || null}
                 status={activeProject?.gitStatus ?? null}
+                branch={activeProject?.gitBranch ?? ''}
+                remote={activeProject?.gitRemote ?? ''}
+                log={activeProject?.gitLog ?? null}
                 message={activeProject?.gitMessage ?? ''}
                 onMessageChange={(value) => {
                   if (!activeProject) {
@@ -667,6 +765,8 @@ function App() {
                 onPull={handleGitPull}
                 onPush={handleGitPush}
                 onRefresh={handleGitRefresh}
+                onOpenDiff={handleOpenDiff}
+                onOpenRemote={handleOpenRemote}
                 isElectron={isElectron}
               />
             ) : (
@@ -692,6 +792,8 @@ function App() {
               activeFilePath={activeProject?.activeFilePath ?? null}
               isLoading={isLoading}
               onSave={handleSave}
+              diffTarget={activeProject?.diffTarget ?? null}
+              onCloseDiff={handleCloseDiff}
               onChange={(value) => {
                 if (!activeProject || !activeProject.activeFilePath) {
                   return
@@ -716,6 +818,7 @@ function App() {
                 updateProject(activeProject.id, (project) => ({
                   ...project,
                   activeFilePath: path,
+                  diffTarget: null,
                 }))
               }}
               onCloseTab={(path) => {
@@ -733,6 +836,7 @@ function App() {
                     openFiles: remaining,
                     openFilePaths: remaining.map((file) => file.path),
                     activeFilePath: nextActive,
+                    diffTarget: project.diffTarget,
                   }
                 })
               }}
@@ -748,7 +852,10 @@ function App() {
                     key={project.id}
                     className={`h-full w-full ${project.id === activeProjectId ? 'block' : 'hidden'}`}
                   >
-                    <TerminalManager isActive={project.id === activeProjectId} />
+                    <TerminalManager
+                      isActive={project.id === activeProjectId}
+                      rootPath={project.rootPath}
+                    />
                   </div>
                 ))
               )}

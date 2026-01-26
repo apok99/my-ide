@@ -122,7 +122,7 @@ export function FileTree({
                 </div>
             )}
 
-            <div className="flex-1 overflow-auto p-2 font-mono">
+            <div className="flex-1 min-h-0 overflow-y-auto p-2 font-mono">
                 {rootPath ? (
                     <div className="space-y-1">
                         <div className="px-2 py-1 text-xs font-bold text-blue-400 opacity-80 mb-2">

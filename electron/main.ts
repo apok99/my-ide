@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promises as fs } from 'node:fs'
@@ -49,6 +49,21 @@ const runGit = (cwd: string, args: string[]) => {
       resolve({ ok: code === 0, stdout, stderr })
     })
   })
+}
+
+const normalizeRemoteUrl = (raw: string) => {
+  if (!raw) {
+    return ''
+  }
+  const url = raw.trim().replace(/\.git$/, '')
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  const sshMatch = url.match(/^git@([^:]+):(.+)$/)
+  if (sshMatch) {
+    return `https://${sshMatch[1]}/${sshMatch[2]}`
+  }
+  return url
 }
 
 type FileNode = {
@@ -264,13 +279,20 @@ app.whenReady().then(() => {
 
   ipcMain.handle('ide:git-status', async (_event, rootPath: string) => {
     if (!rootPath) {
+      return { isRepo: false, clean: true, changes: [] as string[], error: 'Missing root path' }
+    }
+
+    const gitDir = path.join(rootPath, '.git')
+    const gitDirStat = await fs.stat(gitDir).catch(() => null)
+    if (!gitDirStat) {
       return { isRepo: false, clean: true, changes: [] as string[] }
     }
-    const isRepo = await runGit(rootPath, ['rev-parse', '--is-inside-work-tree'])
-    if (!isRepo.ok) {
-      return { isRepo: false, clean: true, changes: [] as string[] }
-    }
+
     const status = await runGit(rootPath, ['status', '--porcelain'])
+    if (!status.ok) {
+      return { isRepo: true, clean: true, changes: [] as string[], error: status.stderr || status.stdout }
+    }
+
     const lines = status.stdout
       .split('\n')
       .map((line) => line.trim())
@@ -312,6 +334,26 @@ app.whenReady().then(() => {
     }
     const push = await runGit(rootPath, ['push'])
     return { ok: push.ok, error: push.ok ? undefined : push.stderr || push.stdout }
+  })
+
+  ipcMain.handle('ide:git-info', async (_event, rootPath: string) => {
+    if (!rootPath) {
+      return { branch: '', remote: '' }
+    }
+    const branch = await runGit(rootPath, ['rev-parse', '--abbrev-ref', 'HEAD'])
+    const remote = await runGit(rootPath, ['remote', 'get-url', 'origin'])
+    return {
+      branch: branch.ok ? branch.stdout.trim() : '',
+      remote: remote.ok ? normalizeRemoteUrl(remote.stdout.trim()) : '',
+    }
+  })
+
+  ipcMain.handle('ide:open-remote', async (_event, remoteUrl: string) => {
+    if (!remoteUrl) {
+      return { ok: false }
+    }
+    await shell.openExternal(remoteUrl)
+    return { ok: true }
   })
 
   ipcMain.handle('ide:git-show-file', async (_event, rootPath: string, filePath: string) => {
