@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react'
-
 type ActivityBarProps = {
   active: 'explorer' | 'git'
   onChange: (value: 'explorer' | 'git') => void
+  gitStatus?: { isRepo: boolean; clean: boolean; changes: string[] } | null
 }
 
-export function ActivityBar({ active, onChange }: ActivityBarProps) {
+export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
+  const hasRepo = Boolean(gitStatus?.isRepo)
+  const changeCount = gitStatus?.changes?.length ?? 0
   return (
     <div className="flex h-full w-12 flex-col items-center gap-2 border-r border-white/5 bg-[#0f1015] py-3">
       <button
@@ -26,7 +27,7 @@ export function ActivityBar({ active, onChange }: ActivityBarProps) {
       <button
         type="button"
         onClick={() => onChange('git')}
-        className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold ${
+        className={`relative flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold ${
           active === 'git'
             ? 'bg-white/10 text-white'
             : 'text-white/50 hover:bg-white/5 hover:text-white/80'
@@ -39,6 +40,15 @@ export function ActivityBar({ active, onChange }: ActivityBarProps) {
           <circle cx="15" cy="15" r="2.2" fill="#0f1015" />
           <circle cx="12" cy="12" r="1.6" fill="#0f1015" />
         </svg>
+        {hasRepo ? (
+          changeCount > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-400 px-1 text-[9px] font-semibold text-black">
+              {Math.min(changeCount, 9)}
+            </span>
+          ) : (
+            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400" />
+          )
+        ) : null}
       </button>
     </div>
   )

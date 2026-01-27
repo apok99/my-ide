@@ -1,34 +1,51 @@
-import { spawn } from 'node:child_process'
+import * as pty from 'node-pty'
 
 export const runCodex = (prompt: string, cwd: string) => {
   return new Promise<{ ok: boolean; output?: string; error?: string }>((resolve) => {
     const cmd = process.env.CODEX_CMD || 'codex'
-    const proc = spawn(cmd, [], { cwd, stdio: 'pipe' })
-
     let output = ''
-    let error = ''
+    let resolved = false
 
-    proc.stdout.on('data', (data) => {
-      output += data.toString()
-    })
-
-    proc.stderr.on('data', (data) => {
-      error += data.toString()
-    })
-
-    proc.on('error', (err) => {
-      resolve({ ok: false, error: String(err) })
-    })
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve({ ok: true, output })
-      } else {
-        resolve({ ok: false, output, error: error || `Exit code ${code}` })
+    const finish = (payload: { ok: boolean; output?: string; error?: string }) => {
+      if (resolved) {
+        return
       }
-    })
+      resolved = true
+      resolve(payload)
+    }
 
-    proc.stdin.write(`${prompt}\n`)
-    proc.stdin.end()
+    try {
+      const proc = pty.spawn(cmd, [], {
+        cwd,
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        env: process.env,
+      })
+
+      const timeout = setTimeout(() => {
+        proc.kill()
+        finish({ ok: false, output, error: 'Codex timeout' })
+      }, 120000)
+
+      proc.onData((data) => {
+        output += data
+      })
+
+      proc.onExit(({ exitCode }) => {
+        clearTimeout(timeout)
+        if (exitCode === 0) {
+          finish({ ok: true, output })
+        } else {
+          finish({ ok: false, output, error: `Exit code ${exitCode}` })
+        }
+      })
+
+      setTimeout(() => {
+        proc.write(`${prompt}\r`)
+      }, 80)
+    } catch (err) {
+      finish({ ok: false, error: String(err) })
+    }
   })
 }

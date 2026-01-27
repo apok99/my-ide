@@ -12,6 +12,25 @@ declare global {
       >
       readFile: (filePath: string) => Promise<string>
       writeFile: (filePath: string, content: string) => Promise<boolean>
+      createFile: (
+        rootPath: string,
+        dirPath: string,
+        name: string,
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>
+      createFolder: (
+        rootPath: string,
+        dirPath: string,
+        name: string,
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>
+      renamePath: (
+        rootPath: string,
+        targetPath: string,
+        newName: string,
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>
+      deletePath: (
+        rootPath: string,
+        targetPath: string,
+      ) => Promise<{ ok: boolean; error?: string }>
       terminalStart: (terminalId: string, cwd?: string) => Promise<boolean>
       terminalInput: (terminalId: string, data: string) => void
       terminalResize: (terminalId: string, cols: number, rows: number) => void

@@ -51,6 +51,92 @@ const runGit = (cwd: string, args: string[]) => {
   })
 }
 
+const getDefaultPath = () => {
+  if (process.platform === 'darwin') {
+    return '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+  }
+  if (process.platform === 'linux') {
+    return '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  }
+  return ''
+}
+
+const getShellArgs = (shell: string) => {
+  const base = path.basename(shell)
+  if (base === 'zsh' || base === 'bash') {
+    return ['-l']
+  }
+  return []
+}
+
+const runRipgrep = (rootPath: string, query: string) => {
+  return new Promise<{
+    ok: boolean
+    results: Array<{ filePath: string; line: number; text: string }>
+  }>((resolve) => {
+    const args = [
+      '--fixed-strings',
+      '--ignore-case',
+      '--hidden',
+      '--no-ignore',
+      '--max-count',
+      '200',
+      '--line-number',
+      '--max-filesize',
+      '1M',
+      '--color',
+      'never',
+      '--',
+      query,
+      rootPath,
+    ]
+    const env = { ...process.env }
+    const defaultPath = getDefaultPath()
+    if (defaultPath) {
+      env.PATH = env.PATH ? `${env.PATH}:${defaultPath}` : defaultPath
+    }
+    const proc = spawn('rg', args, { cwd: rootPath, env })
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString()
+    })
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString()
+    })
+    proc.on('error', () => {
+      resolve({ ok: false, results: [] })
+    })
+    proc.on('close', (code) => {
+      if (code !== 0 && code !== 1) {
+        resolve({ ok: false, results: [] })
+        return
+      }
+      const results: Array<{ filePath: string; line: number; text: string }> = []
+      const lines = stdout.trim().split('\n').filter(Boolean)
+      for (const line of lines) {
+        const first = line.indexOf(':')
+        const second = line.indexOf(':', first + 1)
+        if (first <= 0 || second <= first + 1) {
+          continue
+        }
+        const filePath = line.slice(0, first)
+        const lineNumber = Number(line.slice(first + 1, second))
+        if (!Number.isFinite(lineNumber)) {
+          continue
+        }
+        results.push({
+          filePath,
+          line: lineNumber,
+          text: line.slice(second + 1).trim().slice(0, 240),
+        })
+      }
+      resolve({ ok: true, results })
+    })
+  })
+}
+
 const normalizeRemoteUrl = (raw: string) => {
   if (!raw) {
     return ''
@@ -64,6 +150,19 @@ const normalizeRemoteUrl = (raw: string) => {
     return `https://${sshMatch[1]}/${sshMatch[2]}`
   }
   return url
+}
+
+const isPathInside = (rootPath: string, targetPath: string) => {
+  const relative = path.relative(rootPath, targetPath)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+const isValidEntryName = (name: string) => {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return false
+  }
+  return !trimmed.includes('/') && !trimmed.includes('\\')
 }
 
 type FileNode = {
@@ -124,7 +223,12 @@ const listFilesRecursive = async (
     return collected
   }
 
-  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  let entries: import('node:fs').Dirent[]
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true })
+  } catch {
+    return collected
+  }
   for (const entry of entries) {
     if (collected.length >= maxFiles) {
       break
@@ -147,11 +251,39 @@ const listFilesRecursive = async (
 
 const searchInFiles = async (rootPath: string, query: string) => {
   const results: Array<{ filePath: string; line: number; text: string }> = []
-  if (!query.trim()) {
+  const trimmedQuery = query.trim()
+  if (!rootPath || !trimmedQuery) {
+    return results
+  }
+  const normalizedQuery = trimmedQuery.toLowerCase()
+
+  let searchRoot = rootPath
+  try {
+    searchRoot = await fs.realpath(rootPath)
+  } catch {
+    searchRoot = rootPath
+  }
+
+  try {
+    const stat = await fs.stat(searchRoot)
+    if (!stat.isDirectory()) {
+      searchRoot = path.dirname(searchRoot)
+    }
+  } catch {
     return results
   }
 
-  const files = await listFilesRecursive(rootPath, 8, 500)
+  const rg = await runRipgrep(searchRoot, trimmedQuery)
+  if (rg.ok && rg.results.length) {
+    return rg.results
+  }
+
+  let files: string[] = []
+  try {
+    files = await listFilesRecursive(searchRoot, 10, 2000)
+  } catch {
+    return results
+  }
   for (const filePath of files) {
     if (results.length >= 200) {
       break
@@ -162,7 +294,12 @@ const searchInFiles = async (rootPath: string, query: string) => {
       continue
     }
 
-    const stat = await fs.stat(filePath)
+    let stat: import('node:fs').Stats
+    try {
+      stat = await fs.stat(filePath)
+    } catch {
+      continue
+    }
     if (stat.size > 1024 * 1024) {
       continue
     }
@@ -177,7 +314,7 @@ const searchInFiles = async (rootPath: string, query: string) => {
       if (results.length >= 200) {
         break
       }
-      if (lines[i].toLowerCase().includes(query.toLowerCase())) {
+      if (lines[i].toLowerCase().includes(normalizedQuery)) {
         results.push({
           filePath,
           line: i + 1,
@@ -191,14 +328,20 @@ const searchInFiles = async (rootPath: string, query: string) => {
 }
 
 const createWindow = () => {
+  const appPath = app.getAppPath()
   const preloadPath = isDev
-    ? path.join(app.getAppPath(), 'electron', 'preload.cjs')
-    : path.join(__dirname, 'preload.cjs')
+    ? path.join(appPath, 'electron', 'preload.cjs')
+    : path.join(appPath, 'electron', 'dist', 'preload.cjs')
+  const iconPath = isDev
+    ? path.join(appPath, 'electron', 'icon.png')
+    : path.join(appPath, 'electron', 'dist', 'icon.png')
 
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     backgroundColor: '#0b0d12',
+    icon: iconPath,
+    title: 'deivids magic studio',
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -218,11 +361,12 @@ const createWindow = () => {
     win.loadURL(process.env.VITE_DEV_SERVER_URL as string)
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
+    win.loadFile(path.join(appPath, 'dist', 'index.html'))
   }
 }
 
 app.whenReady().then(() => {
+  app.setName('deivids magic studio')
   ipcMain.handle('ide:select-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
@@ -275,6 +419,111 @@ app.whenReady().then(() => {
   ipcMain.handle('ide:write-file', async (_event, filePath: string, content: string) => {
     await fs.writeFile(filePath, content, 'utf8')
     return true
+  })
+
+  ipcMain.handle(
+    'ide:create-file',
+    async (_event, rootPath: string, dirPath: string, name: string) => {
+      if (!rootPath) {
+        return { ok: false, error: 'Missing root path' }
+      }
+      if (!isValidEntryName(name)) {
+        return { ok: false, error: 'Invalid file name' }
+      }
+
+      const baseDir = path.resolve(dirPath || rootPath)
+      if (!isPathInside(rootPath, baseDir)) {
+        return { ok: false, error: 'Invalid target path' }
+      }
+
+      const filePath = path.join(baseDir, name.trim())
+      if (!isPathInside(rootPath, filePath)) {
+        return { ok: false, error: 'Invalid file path' }
+      }
+
+      try {
+        await fs.writeFile(filePath, '', { flag: 'wx' })
+        return { ok: true, path: filePath }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ide:create-folder',
+    async (_event, rootPath: string, dirPath: string, name: string) => {
+      if (!rootPath) {
+        return { ok: false, error: 'Missing root path' }
+      }
+      if (!isValidEntryName(name)) {
+        return { ok: false, error: 'Invalid folder name' }
+      }
+
+      const baseDir = path.resolve(dirPath || rootPath)
+      if (!isPathInside(rootPath, baseDir)) {
+        return { ok: false, error: 'Invalid target path' }
+      }
+
+      const folderPath = path.join(baseDir, name.trim())
+      if (!isPathInside(rootPath, folderPath)) {
+        return { ok: false, error: 'Invalid folder path' }
+      }
+
+      try {
+        await fs.mkdir(folderPath, { recursive: false })
+        return { ok: true, path: folderPath }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ide:rename-path',
+    async (_event, rootPath: string, targetPath: string, newName: string) => {
+      if (!rootPath) {
+        return { ok: false, error: 'Missing root path' }
+      }
+      if (!isValidEntryName(newName)) {
+        return { ok: false, error: 'Invalid name' }
+      }
+
+      const resolvedTarget = path.resolve(targetPath)
+      if (!isPathInside(rootPath, resolvedTarget)) {
+        return { ok: false, error: 'Invalid target path' }
+      }
+
+      const nextPath = path.join(path.dirname(resolvedTarget), newName.trim())
+      if (!isPathInside(rootPath, nextPath)) {
+        return { ok: false, error: 'Invalid destination path' }
+      }
+
+      try {
+        await fs.rename(resolvedTarget, nextPath)
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle('ide:delete-path', async (_event, rootPath: string, targetPath: string) => {
+    if (!rootPath) {
+      return { ok: false, error: 'Missing root path' }
+    }
+
+    const resolvedTarget = path.resolve(targetPath)
+    if (!isPathInside(rootPath, resolvedTarget)) {
+      return { ok: false, error: 'Invalid target path' }
+    }
+
+    try {
+      await fs.rm(resolvedTarget, { recursive: true, force: true })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
   })
 
   ipcMain.handle('ide:git-status', async (_event, rootPath: string) => {
@@ -414,12 +663,18 @@ app.whenReady().then(() => {
     console.log(`[Terminal ${id}] Starting shell: ${shell} in ${cwd || os.homedir()}`)
 
     try {
-      const terminal = pty.spawn(shell, [], {
+      const env = { ...process.env }
+      const defaultPath = getDefaultPath()
+      if (defaultPath) {
+        env.PATH = env.PATH ? `${env.PATH}:${defaultPath}` : defaultPath
+      }
+
+      const terminal = pty.spawn(shell, getShellArgs(shell), {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
         cwd: cwd || os.homedir(),
-        env: process.env,
+        env,
       })
 
       terminals.set(id, terminal)

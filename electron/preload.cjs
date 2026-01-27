@@ -8,6 +8,14 @@ contextBridge.exposeInMainWorld('ide', {
   readFile: (filePath) => ipcRenderer.invoke('ide:read-file', filePath),
   writeFile: (filePath, content) =>
     ipcRenderer.invoke('ide:write-file', filePath, content),
+  createFile: (rootPath, dirPath, name) =>
+    ipcRenderer.invoke('ide:create-file', rootPath, dirPath, name),
+  createFolder: (rootPath, dirPath, name) =>
+    ipcRenderer.invoke('ide:create-folder', rootPath, dirPath, name),
+  renamePath: (rootPath, targetPath, newName) =>
+    ipcRenderer.invoke('ide:rename-path', rootPath, targetPath, newName),
+  deletePath: (rootPath, targetPath) =>
+    ipcRenderer.invoke('ide:delete-path', rootPath, targetPath),
   terminalStart: (id, cwd) => ipcRenderer.invoke('ide:terminal-start', id, cwd),
   terminalInput: (id, data) => ipcRenderer.send('ide:terminal-input', id, data),
   terminalResize: (id, cols, rows) => ipcRenderer.send('ide:terminal-resize', id, cols, rows),

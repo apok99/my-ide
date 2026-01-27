@@ -1,5 +1,5 @@
 {
-  "name": "ide-3panel",
+  "name": "deivids-magic-studio",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,11 +9,28 @@
     "dev:renderer": "vite",
     "dev:electron:build": "tsc -p electron/tsconfig.json --watch",
     "dev:electron": "wait-on tcp:5173 file:electron/dist/main.js file:electron/preload.cjs && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json && cp electron/preload.cjs electron/dist/preload.cjs",
+    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json && cp electron/preload.cjs electron/dist/preload.cjs && cp electron/icon.png electron/dist/icon.png",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
     "start": "electron .",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.deivids.magicstudio",
+    "productName": "deivids magic studio",
+    "files": [
+      "dist/**",
+      "electron/dist/**",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "electron/icon.icns",
+      "target": [
+        "dmg"
+      ]
+    }
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -35,6 +52,7 @@
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.2.1",
     "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

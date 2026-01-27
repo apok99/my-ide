@@ -1,16 +1,21 @@
+import { useRef } from 'react'
 import Editor, { DiffEditor, type Monaco } from '@monaco-editor/react'
-import type { DiffTarget, LoadedFile } from '../../types'
+import type { editor as MonacoEditor } from 'monaco-editor'
+import type { DiffTarget, LoadedFile, ProblemItem } from '../../types'
 
 interface CodeEditorProps {
     openFiles: LoadedFile[]
     activeFilePath: string | null
     isLoading: boolean
-    onSave: () => void
     onChange: (value: string | undefined) => void
     onSelectTab: (path: string) => void
     onCloseTab: (path: string) => void
+    onRequestRefresh: () => void
     diffTarget: DiffTarget | null
     onCloseDiff: () => void
+    onEditorReady?: (editor: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco) => void
+    onProblemsChange?: (problems: ProblemItem[]) => void
+    onOpenToken?: (token: string, line: string, column: number) => void
 }
 
 const languageByExtension: Record<string, string> = {
@@ -18,6 +23,8 @@ const languageByExtension: Record<string, string> = {
     tsx: 'typescript',
     js: 'javascript',
     jsx: 'javascript',
+    vue: 'html',
+    env: 'ini',
     json: 'json',
     css: 'css',
     html: 'html',
@@ -25,7 +32,34 @@ const languageByExtension: Record<string, string> = {
     php: 'php',
 }
 
+const getTabBadge = (name: string) => {
+    const lower = name.toLowerCase()
+    if (lower === '.env' || lower.endsWith('.env')) {
+        return { label: 'ENV', className: 'bg-emerald-500/20 text-emerald-300' }
+    }
+    if (lower.endsWith('.vue')) {
+        return { label: 'VUE', className: 'bg-emerald-500/20 text-emerald-300' }
+    }
+    if (lower.endsWith('.tsx')) {
+        return { label: 'TSX', className: 'bg-sky-500/20 text-sky-300' }
+    }
+    if (lower.endsWith('.ts')) {
+        return { label: 'TS', className: 'bg-sky-500/20 text-sky-300' }
+    }
+    if (lower.endsWith('.jsx')) {
+        return { label: 'JSX', className: 'bg-amber-500/20 text-amber-300' }
+    }
+    if (lower.endsWith('.js')) {
+        return { label: 'JS', className: 'bg-amber-500/20 text-amber-300' }
+    }
+    return { label: 'FILE', className: 'bg-white/10 text-white/50' }
+}
+
 const getLanguage = (filename: string) => {
+    const lower = filename.toLowerCase()
+    if (lower === '.env' || lower.startsWith('.env.')) {
+        return 'ini'
+    }
     const parts = filename.split('.')
     const ext = parts[parts.length - 1]?.toLowerCase()
     return (ext && languageByExtension[ext]) || 'plaintext'
@@ -35,20 +69,36 @@ export function CodeEditor({
     openFiles,
     activeFilePath,
     isLoading,
-    onSave,
     onChange,
     onSelectTab,
     onCloseTab,
+    onRequestRefresh,
     diffTarget,
     onCloseDiff,
+    onEditorReady,
+    onProblemsChange,
+    onOpenToken,
 }: CodeEditorProps) {
     const activeFile = openFiles.find((file) => file.path === activeFilePath) ?? null
+    const methodDecorationsRef = useRef<string[]>([])
 
     const handleBeforeMount = (monaco: Monaco) => {
         monaco.editor.defineTheme('vscode-dark', {
             base: 'vs-dark',
             inherit: true,
-            rules: [],
+            rules: [
+                { token: 'type.identifier', foreground: '56d1b2' },
+                { token: 'type.identifier.php', foreground: '56d1b2' },
+                { token: 'entity.name.function', foreground: 'ffeeb0' },
+                { token: 'entity.name.function.php', foreground: 'ffeeb0' },
+                { token: 'support.function', foreground: 'ffeeb0' },
+                { token: 'support.function.php', foreground: 'ffeeb0' },
+                { token: 'variable', foreground: '96e8ff' },
+                { token: 'variable.other', foreground: '96e8ff' },
+                { token: 'variable.other.readwrite', foreground: '96e8ff' },
+                { token: 'variable.php', foreground: '96e8ff' },
+                { token: 'identifier.php', foreground: '56d1b2' },
+            ],
             colors: {
                 'editor.background': '#1e1e1e',
                 'editor.lineHighlightBackground': '#2a2d2e',
@@ -60,6 +110,70 @@ export function CodeEditor({
                 'editorWhitespace.foreground': '#2a2a2a',
             },
         })
+        monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+            noSemanticValidation: false,
+            noSyntaxValidation: false,
+        })
+        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+            noSemanticValidation: false,
+            noSyntaxValidation: false,
+        })
+    }
+
+    const getProblems = (monaco: Monaco) => {
+        const markers = monaco.editor.getModelMarkers({})
+        return markers.map<ProblemItem>((marker: MonacoEditor.IMarker) => {
+            const rawPath = marker.resource?.fsPath || decodeURIComponent(marker.resource?.path ?? '')
+            return {
+                filePath: rawPath,
+                line: marker.startLineNumber,
+                column: marker.startColumn,
+                message: marker.message,
+                severity:
+                    marker.severity === monaco.MarkerSeverity.Error
+                        ? 'error'
+                        : marker.severity === monaco.MarkerSeverity.Warning
+                            ? 'warning'
+                            : marker.severity === monaco.MarkerSeverity.Info
+                                ? 'info'
+                                : 'hint',
+                source: marker.source,
+            }
+        })
+    }
+
+    const applyPhpMethodDecorations = (
+        editor: MonacoEditor.IStandaloneCodeEditor,
+        monaco: Monaco,
+    ) => {
+        const model = editor.getModel()
+        if (!model || model.getLanguageId() !== 'php') {
+            methodDecorationsRef.current = editor.deltaDecorations(methodDecorationsRef.current, [])
+            return
+        }
+        const text = model.getValue()
+        const regex = /(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
+        const decorations: MonacoEditor.IModelDeltaDecoration[] = []
+        let match: RegExpExecArray | null
+        while ((match = regex.exec(text))) {
+            const name = match[1]
+            const nameIndex = match.index + match[0].lastIndexOf(name)
+            const start = model.getPositionAt(nameIndex)
+            const end = model.getPositionAt(nameIndex + name.length)
+            decorations.push({
+                range: new monaco.Range(
+                    start.lineNumber,
+                    start.column,
+                    end.lineNumber,
+                    end.column,
+                ),
+                options: { inlineClassName: 'monaco-php-method' },
+            })
+        }
+        methodDecorationsRef.current = editor.deltaDecorations(
+            methodDecorationsRef.current,
+            decorations,
+        )
     }
 
     return (
@@ -81,7 +195,16 @@ export function CodeEditor({
                                         }`}
                                 >
                                     <span className="flex items-center gap-2 truncate">
-                                        <span className="opacity-70">📝</span>
+                                        {(() => {
+                                            const badge = getTabBadge(file.name)
+                                            return (
+                                                <span
+                                                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${badge.className}`}
+                                                >
+                                                    {badge.label}
+                                                </span>
+                                            )
+                                        })()}
                                         {file.name}
                                         {file.dirty ? <span className="text-blue-300">*</span> : null}
                                     </span>
@@ -122,6 +245,7 @@ export function CodeEditor({
             <div className="relative flex-1 min-h-0 overflow-hidden bg-[#1e1e1e]">
                 {diffTarget ? (
                     <DiffEditor
+                        key={`${diffTarget.filePath}:${diffTarget.original.length}:${diffTarget.modified.length}`}
                         height="100%"
                         width="100%"
                         theme="vscode-dark"
@@ -142,8 +266,49 @@ export function CodeEditor({
                         width="100%"
                         theme="vscode-dark"
                         language={getLanguage(activeFile.name)}
+                        path={activeFile.path}
                         value={activeFile.content}
                         beforeMount={handleBeforeMount}
+                        onMount={(editor, monaco) => {
+                            editor.onDidFocusEditorWidget(() => {
+                                onRequestRefresh()
+                            })
+                            onEditorReady?.(editor, monaco)
+                            const update = () => {
+                                onProblemsChange?.(getProblems(monaco))
+                            }
+                            update()
+                            const markerListener = monaco.editor.onDidChangeMarkers(update)
+                            applyPhpMethodDecorations(editor, monaco)
+                            const modelListener = editor.onDidChangeModel(() => {
+                                applyPhpMethodDecorations(editor, monaco)
+                            })
+                            const contentListener = editor.onDidChangeModelContent(() => {
+                                applyPhpMethodDecorations(editor, monaco)
+                            })
+                            const clickListener = editor.onMouseDown((event) => {
+                                if (!onOpenToken) {
+                                    return
+                                }
+                                if (!event.event.ctrlKey && !event.event.metaKey) {
+                                    return
+                                }
+                                const position = event.target.position
+                                const model = editor.getModel()
+                                if (!position || !model) {
+                                    return
+                                }
+                                const word = model.getWordAtPosition(position)
+                                const lineContent = model.getLineContent(position.lineNumber)
+                                onOpenToken(word?.word ?? '', lineContent, position.column)
+                            })
+                            editor.onDidDispose(() => {
+                                markerListener.dispose()
+                                modelListener.dispose()
+                                contentListener.dispose()
+                                clickListener.dispose()
+                            })
+                        }}
                         options={{
                             fontSize: 15,
                             fontFamily: '"JetBrains Mono", "Fira Code", monospace',

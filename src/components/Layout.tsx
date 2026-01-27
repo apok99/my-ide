@@ -12,6 +12,7 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
     const rightRef = useRef<HTMLDivElement | null>(null)
     const draggingRef = useRef(false)
     const [split, setSplit] = useState(0.5)
+    const [editorFullscreen, setEditorFullscreen] = useState(false)
     const splitKey = 'dms.terminalSplit'
 
     const clamp = (value: number, min: number, max: number) =>
@@ -59,6 +60,12 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase()
+            if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && key === 'c') {
+                event.preventDefault()
+                setEditorFullscreen((prev) => !prev)
+                return
+            }
             const isMod = event.metaKey || event.ctrlKey
             if (!isMod || !event.altKey) {
                 return
@@ -103,28 +110,46 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
         <div className="h-full w-full overflow-hidden bg-[#0b0d12] text-[#d4d4d4]">
             <div className="flex h-full w-full">
                 {/* Activity Bar */}
-                {activityBar}
+                <div
+                    className={`flex h-full overflow-hidden transition-[width,opacity] duration-300 ease-out ${
+                        editorFullscreen ? 'w-0 opacity-0 pointer-events-none' : 'w-12'
+                    }`}
+                >
+                    {activityBar}
+                </div>
 
                 {/* Side Panel (Explorer or Git) */}
-                <aside className="flex h-full w-[240px] flex-col overflow-hidden border-r border-white/5 bg-[#0f0f0f]">
+                <aside
+                    className={`flex h-full flex-col overflow-hidden border-r border-white/5 bg-[#0f0f0f] transition-[width,opacity] duration-300 ease-out ${
+                        editorFullscreen ? 'w-0 opacity-0 pointer-events-none' : 'w-[240px]'
+                    }`}
+                >
                     {sidePanel}
                 </aside>
 
                 <div
                     ref={rightRef}
-                    className="grid h-full flex-1"
+                    className="grid h-full flex-1 transition-[grid-template-columns] duration-300 ease-out"
                     style={{
-                        gridTemplateColumns: `${split * 100}% 6px ${100 - split * 100}%`,
+                        gridTemplateColumns: editorFullscreen
+                            ? '0px 0px 100%'
+                            : `${split * 100}% 6px ${100 - split * 100}%`,
                     }}
                 >
                     {/* Column 2: Terminal */}
-                    <section className="relative h-full w-full overflow-hidden border-r border-white/5 bg-[#0b0d12]">
+                    <section
+                        className={`relative h-full w-full overflow-hidden border-r border-white/5 bg-[#0b0d12] transition-opacity duration-300 ease-out ${
+                            editorFullscreen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                        }`}
+                    >
                         {terminal}
                     </section>
 
                     {/* Resizer */}
                     <div
-                        className="cursor-col-resize bg-[#1f1f1f] hover:bg-blue-500/40"
+                        className={`cursor-col-resize bg-[#1f1f1f] hover:bg-blue-500/40 ${
+                            editorFullscreen ? 'pointer-events-none opacity-0' : 'opacity-100'
+                        }`}
                         onPointerDown={handlePointerDown}
                         onPointerMove={handlePointerMove}
                         onPointerUp={handlePointerUp}

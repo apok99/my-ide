@@ -102,6 +102,10 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
         ensureTerminalCount(count)
     }, [ensureTerminalCount])
 
+    const handleStackLayout = useCallback(() => {
+        setLayoutMode(1)
+    }, [])
+
     return (
         <div className="relative h-full w-full overflow-hidden bg-[#0b0d12] p-4 text-white">
             {/* Header / Controls */}
@@ -109,6 +113,13 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
                 <span className="text-sm font-medium uppercase tracking-wider text-white/50">Terminals</span>
                 <div className="flex items-center gap-2">
                     <div className="flex bg-white/5 rounded-md p-0.5 border border-white/5">
+                        <button
+                            onClick={handleStackLayout}
+                            className="rounded px-2 py-0.5 text-[10px] font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-colors"
+                            title="Stack terminals (1 column)"
+                        >
+                            V
+                        </button>
                         <button
                             onClick={() => handlePreset(2)}
                             className="rounded px-2 py-0.5 text-[10px] font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-colors"
