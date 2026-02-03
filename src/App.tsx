@@ -23,6 +23,9 @@ type ProjectState = {
   gitStatus: { isRepo: boolean; clean: boolean; changes: string[]; error?: string } | null
   gitMessage: string
   gitBranch: string
+  gitBranches: string[]
+  gitSelectedBranch: string
+  gitMergeSource: string
   gitRemote: string
   gitLog: string | null
   diffTarget: DiffTarget | null
@@ -315,6 +318,9 @@ function App() {
         gitStatus: null,
         gitMessage: '',
         gitBranch: '',
+        gitBranches: [],
+        gitSelectedBranch: '',
+        gitMergeSource: '',
         gitRemote: '',
         gitLog: null,
         diffTarget: null,
@@ -983,6 +989,9 @@ function App() {
         gitStatus: null,
         gitMessage: '',
         gitBranch: '',
+        gitBranches: [],
+        gitSelectedBranch: '',
+        gitMergeSource: '',
         gitRemote: '',
         gitLog: null,
         diffTarget: null,
@@ -1018,16 +1027,44 @@ function App() {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
-    const [status, info] = await Promise.all([
+    const [status, info, branchesResult] = await Promise.all([
       window.ide.gitStatus(activeProject.rootPath),
       window.ide.gitInfo(activeProject.rootPath),
+      window.ide.gitBranches(activeProject.rootPath),
     ])
     updateProject(activeProject.id, (project) => ({
       ...project,
       gitStatus: status,
       gitBranch: info.branch,
+      gitBranches: branchesResult.ok ? branchesResult.branches : project.gitBranches,
+      gitSelectedBranch: (() => {
+        if (branchesResult.ok) {
+          if (project.gitSelectedBranch && branchesResult.branches.includes(project.gitSelectedBranch)) {
+            return project.gitSelectedBranch
+          }
+          if (info.branch && branchesResult.branches.includes(info.branch)) {
+            return info.branch
+          }
+          return branchesResult.branches[0] ?? ''
+        }
+        return project.gitSelectedBranch || info.branch
+      })(),
+      gitMergeSource: (() => {
+        if (branchesResult.ok) {
+          if (project.gitMergeSource && branchesResult.branches.includes(project.gitMergeSource)) {
+            return project.gitMergeSource
+          }
+          const fallback = branchesResult.branches.find((item) => item !== info.branch)
+          return fallback ?? ''
+        }
+        return project.gitMergeSource
+      })(),
       gitRemote: info.remote,
-      gitLog: status.error ? `Git error: ${status.error}` : project.gitLog,
+      gitLog: status.error
+        ? `Git error: ${status.error}`
+        : !branchesResult.ok && branchesResult.error
+          ? `Git error: ${branchesResult.error}`
+          : project.gitLog,
     }))
   }, [activeProject, updateProject])
 
@@ -1094,6 +1131,112 @@ function App() {
     updateProject(activeProject.id, (project) => ({
       ...project,
       gitLog: result.ok ? 'Push completado.' : result.error ?? 'Push fallo.',
+    }))
+    handleGitRefresh()
+  }, [activeProject, handleGitRefresh, updateProject])
+
+  const handleGitSelectBranch = useCallback(
+    (value: string) => {
+      if (!activeProject) {
+        return
+      }
+      updateProject(activeProject.id, (project) => ({ ...project, gitSelectedBranch: value }))
+    },
+    [activeProject, updateProject],
+  )
+
+  const handleGitCreateBranch = useCallback(
+    async (name: string) => {
+      if (!window.ide || !activeProject?.rootPath) {
+        return
+      }
+      const trimmed = name.trim()
+      if (!trimmed) {
+        updateProject(activeProject.id, (project) => ({
+          ...project,
+          gitLog: 'El nombre de la rama es obligatorio.',
+        }))
+        return
+      }
+      const result = await window.ide.gitCreateBranch(activeProject.rootPath, trimmed)
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: result.ok ? `Rama creada: ${trimmed}` : result.error ?? 'Crear rama fallo.',
+        gitSelectedBranch: result.ok ? trimmed : project.gitSelectedBranch,
+      }))
+      handleGitRefresh()
+    },
+    [activeProject, handleGitRefresh, updateProject],
+  )
+
+  const handleGitCheckoutBranch = useCallback(
+    async (name: string) => {
+      if (!window.ide || !activeProject?.rootPath) {
+        return
+      }
+      const trimmed = name.trim()
+      if (!trimmed) {
+        updateProject(activeProject.id, (project) => ({
+          ...project,
+          gitLog: 'Selecciona una rama para hacer checkout.',
+        }))
+        return
+      }
+      const result = await window.ide.gitCheckoutBranch(activeProject.rootPath, trimmed)
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: result.ok ? `Checkout a ${trimmed}` : result.error ?? 'Checkout fallo.',
+      }))
+      handleGitRefresh()
+    },
+    [activeProject, handleGitRefresh, updateProject],
+  )
+
+  const handleGitSelectMergeSource = useCallback(
+    (value: string) => {
+      if (!activeProject) {
+        return
+      }
+      updateProject(activeProject.id, (project) => ({ ...project, gitMergeSource: value }))
+    },
+    [activeProject, updateProject],
+  )
+
+  const handleGitMergeBranches = useCallback(async () => {
+    if (!window.ide || !activeProject?.rootPath) {
+      return
+    }
+    const source = activeProject.gitMergeSource.trim()
+    const target = activeProject.gitSelectedBranch.trim()
+    if (!source || !target) {
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: 'Selecciona rama origen y destino para hacer merge.',
+      }))
+      return
+    }
+    if (source === target) {
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: 'La rama origen y destino no pueden ser la misma.',
+      }))
+      return
+    }
+
+    const checkout = await window.ide.gitCheckoutBranch(activeProject.rootPath, target)
+    if (!checkout.ok) {
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        gitLog: checkout.error ?? 'Checkout fallo.',
+      }))
+      handleGitRefresh()
+      return
+    }
+
+    const merge = await window.ide.gitMergeBranch(activeProject.rootPath, source)
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      gitLog: merge.ok ? `Merge ${source} -> ${target}` : merge.error ?? 'Merge fallo.',
     }))
     handleGitRefresh()
   }, [activeProject, handleGitRefresh, updateProject])
@@ -1353,6 +1496,9 @@ function App() {
         gitStatus: null,
         gitMessage: '',
         gitBranch: '',
+        gitBranches: [],
+        gitSelectedBranch: '',
+        gitMergeSource: '',
         gitRemote: '',
         gitLog: null,
         diffTarget: null,
@@ -1640,6 +1786,9 @@ function App() {
                 rootPath={activeProject?.rootPath || null}
                 status={activeProject?.gitStatus ?? null}
                 branch={activeProject?.gitBranch ?? ''}
+                branches={activeProject?.gitBranches ?? []}
+                selectedBranch={activeProject?.gitSelectedBranch ?? ''}
+                mergeSource={activeProject?.gitMergeSource ?? ''}
                 remote={activeProject?.gitRemote ?? ''}
                 log={activeProject?.gitLog ?? null}
                 message={activeProject?.gitMessage ?? ''}
@@ -1654,6 +1803,11 @@ function App() {
                 onAutoCommit={handleAutoCommit}
                 onPull={handleGitPull}
                 onPush={handleGitPush}
+                onSelectBranch={handleGitSelectBranch}
+                onCreateBranch={handleGitCreateBranch}
+                onCheckoutBranch={handleGitCheckoutBranch}
+                onSelectMergeSource={handleGitSelectMergeSource}
+                onMergeBranches={handleGitMergeBranches}
                 onRefresh={handleGitRefresh}
                 onOpenDiff={handleOpenDiff}
                 onOpenRemote={handleOpenRemote}

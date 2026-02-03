@@ -1,9 +1,14 @@
+import { useState } from 'react'
+
 type GitStatus = { isRepo: boolean; clean: boolean; changes: string[]; error?: string }
 
 type GitPanelProps = {
   rootPath: string | null
   status: GitStatus | null
   branch: string
+  branches: string[]
+  selectedBranch: string
+  mergeSource: string
   remote: string
   log: string | null
   message: string
@@ -13,6 +18,11 @@ type GitPanelProps = {
   onAutoCommit: () => void
   onPull: () => void
   onPush: () => void
+  onSelectBranch: (value: string) => void
+  onCreateBranch: (name: string) => void
+  onCheckoutBranch: (name: string) => void
+  onSelectMergeSource: (value: string) => void
+  onMergeBranches: () => void
   onRefresh: () => void
   onOpenDiff: (filePath: string) => void
   onOpenRemote: () => void
@@ -20,7 +30,27 @@ type GitPanelProps = {
 }
 
 export function GitPanel(props: GitPanelProps) {
-  const { rootPath, status, branch, log, onOpenDiff, onCommit, onPull, onPush, message, onMessageChange } = props
+  const {
+    rootPath,
+    status,
+    branch,
+    branches,
+    selectedBranch,
+    mergeSource,
+    log,
+    onOpenDiff,
+    onCommit,
+    onPull,
+    onPush,
+    onSelectBranch,
+    onCreateBranch,
+    onCheckoutBranch,
+    onSelectMergeSource,
+    onMergeBranches,
+    message,
+    onMessageChange,
+  } = props
+  const [newBranch, setNewBranch] = useState('')
   const normalizedRoot = rootPath
     ? rootPath.endsWith('/') || rootPath.endsWith('\\')
       ? rootPath.slice(0, -1)
@@ -104,6 +134,91 @@ export function GitPanel(props: GitPanelProps) {
       </div>
 
       <div className="flex-1 overflow-auto px-4 py-4 text-xs text-white/70">
+        <div className="mb-4 rounded border border-white/10 bg-white/5 px-3 py-3">
+          <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Ramas</label>
+          <div className="mt-2 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <select
+                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                value={selectedBranch}
+                onChange={(event) => onSelectBranch(event.target.value)}
+                disabled={!status?.isRepo || branches.length === 0}
+              >
+                {branches.length === 0 ? (
+                  <option value="">Sin ramas</option>
+                ) : (
+                  branches.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                      {item === branch ? ' (actual)' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                onClick={() => onCheckoutBranch(selectedBranch)}
+                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Checkout"
+                disabled={!status?.isRepo || !selectedBranch || selectedBranch === branch}
+              >
+                Checkout
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                className="w-full rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                placeholder="Nueva rama"
+                value={newBranch}
+                onChange={(event) => setNewBranch(event.target.value)}
+                disabled={!status?.isRepo}
+              />
+              <button
+                onClick={() => {
+                  const trimmed = newBranch.trim()
+                  if (!trimmed) {
+                    return
+                  }
+                  onCreateBranch(trimmed)
+                  setNewBranch('')
+                }}
+                className="w-full rounded border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-100 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Crear rama"
+                disabled={!status?.isRepo || !newBranch.trim()}
+              >
+                Crear
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                value={mergeSource}
+                onChange={(event) => onSelectMergeSource(event.target.value)}
+                disabled={!status?.isRepo || branches.length === 0}
+              >
+                {branches.length === 0 ? (
+                  <option value="">Sin ramas</option>
+                ) : (
+                  branches
+                    .filter((item) => item !== selectedBranch)
+                    .map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))
+                )}
+              </select>
+              <button
+                onClick={onMergeBranches}
+                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Merge"
+                disabled={!status?.isRepo || !mergeSource || !selectedBranch || mergeSource === selectedBranch}
+              >
+                Merge
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="mb-4 rounded border border-white/10 bg-white/5 px-3 py-3">
           <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Mensaje</label>
           <textarea

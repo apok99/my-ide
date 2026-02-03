@@ -10,7 +10,15 @@ import { spawn } from 'node:child_process'
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const ignoredFolders = new Set(['node_modules', '.git', 'dist', 'out'])
+const ignoredFolders = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'out',
+  'vendor',
+  'storage',
+  'bootstrap',
+])
 const ignoredExtensions = new Set([
   '.png',
   '.jpg',
@@ -595,6 +603,57 @@ app.whenReady().then(() => {
       branch: branch.ok ? branch.stdout.trim() : '',
       remote: remote.ok ? normalizeRemoteUrl(remote.stdout.trim()) : '',
     }
+  })
+
+  ipcMain.handle('ide:git-branches', async (_event, rootPath: string) => {
+    if (!rootPath) {
+      return { ok: false, branches: [] as string[], error: 'Missing root path' }
+    }
+    const list = await runGit(rootPath, ['branch', '--format=%(refname:short)'])
+    if (!list.ok) {
+      return { ok: false, branches: [] as string[], error: list.stderr || list.stdout }
+    }
+    const branches = list.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    return { ok: true, branches }
+  })
+
+  ipcMain.handle('ide:git-create-branch', async (_event, rootPath: string, name: string) => {
+    if (!rootPath) {
+      return { ok: false, error: 'Missing root path' }
+    }
+    const branchName = String(name || '').trim()
+    if (!branchName) {
+      return { ok: false, error: 'Missing branch name' }
+    }
+    const create = await runGit(rootPath, ['branch', branchName])
+    return { ok: create.ok, error: create.ok ? undefined : create.stderr || create.stdout }
+  })
+
+  ipcMain.handle('ide:git-checkout-branch', async (_event, rootPath: string, name: string) => {
+    if (!rootPath) {
+      return { ok: false, error: 'Missing root path' }
+    }
+    const branchName = String(name || '').trim()
+    if (!branchName) {
+      return { ok: false, error: 'Missing branch name' }
+    }
+    const checkout = await runGit(rootPath, ['checkout', branchName])
+    return { ok: checkout.ok, error: checkout.ok ? undefined : checkout.stderr || checkout.stdout }
+  })
+
+  ipcMain.handle('ide:git-merge-branch', async (_event, rootPath: string, name: string) => {
+    if (!rootPath) {
+      return { ok: false, error: 'Missing root path' }
+    }
+    const branchName = String(name || '').trim()
+    if (!branchName) {
+      return { ok: false, error: 'Missing branch name' }
+    }
+    const merge = await runGit(rootPath, ['merge', branchName])
+    return { ok: merge.ok, error: merge.ok ? undefined : merge.stderr || merge.stdout }
   })
 
   ipcMain.handle('ide:open-remote', async (_event, remoteUrl: string) => {

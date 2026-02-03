@@ -35,6 +35,13 @@ contextBridge.exposeInMainWorld('ide', {
   gitShowFile: (rootPath, filePath) =>
     ipcRenderer.invoke('ide:git-show-file', rootPath, filePath),
   gitInfo: (rootPath) => ipcRenderer.invoke('ide:git-info', rootPath),
+  gitBranches: (rootPath) => ipcRenderer.invoke('ide:git-branches', rootPath),
+  gitCreateBranch: (rootPath, name) =>
+    ipcRenderer.invoke('ide:git-create-branch', rootPath, name),
+  gitCheckoutBranch: (rootPath, name) =>
+    ipcRenderer.invoke('ide:git-checkout-branch', rootPath, name),
+  gitMergeBranch: (rootPath, name) =>
+    ipcRenderer.invoke('ide:git-merge-branch', rootPath, name),
   openRemote: (remoteUrl) => ipcRenderer.invoke('ide:open-remote', remoteUrl),
   codexCommit: (prompt, cwd) => ipcRenderer.invoke('ide:codex-commit', prompt, cwd),
 })

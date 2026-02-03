@@ -59,6 +59,21 @@ declare global {
       gitInfo: (
         rootPath: string,
       ) => Promise<{ branch: string; remote: string }>
+      gitBranches: (
+        rootPath: string,
+      ) => Promise<{ ok: boolean; branches: string[]; error?: string }>
+      gitCreateBranch: (
+        rootPath: string,
+        name: string,
+      ) => Promise<{ ok: boolean; error?: string }>
+      gitCheckoutBranch: (
+        rootPath: string,
+        name: string,
+      ) => Promise<{ ok: boolean; error?: string }>
+      gitMergeBranch: (
+        rootPath: string,
+        name: string,
+      ) => Promise<{ ok: boolean; error?: string }>
       openRemote: (remoteUrl: string) => Promise<{ ok: boolean }>
       codexCommit: (
         prompt: string,
