@@ -10,8 +10,43 @@ import { spawn } from 'node:child_process'
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const ignoredFolders = new Set<string>([])
-const ignoredExtensions = new Set<string>([])
+const ignoredFolders = new Set<string>([
+  'node_modules',
+  '.git',
+  '.svn',
+  '.hg',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.vite',
+  '.vercel',
+  'coverage',
+  '.cache',
+  '__pycache__',
+  '.pytest_cache',
+  'vendor',
+  '.vendor',
+  'target',
+  '.gradle',
+  '.idea',
+])
+
+const ignoredExtensions = new Set<string>([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.ico', '.avif',
+  '.svg',
+  '.mp4', '.mp3', '.wav', '.ogg', '.flac', '.avi', '.mov', '.mkv', '.webm',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.tgz',
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.class',
+  '.db', '.sqlite', '.sqlite3',
+  '.map',
+  '.lock',
+  '.min.js',
+])
 const treeDepthLimit = 64
 
 const runGit = (cwd: string, args: string[]) => {
@@ -61,15 +96,23 @@ const runRipgrep = (rootPath: string, query: string) => {
     const args = [
       '--fixed-strings',
       '--ignore-case',
-      '--hidden',
-      '--no-ignore',
-      '--max-count',
-      '200',
       '--line-number',
-      '--max-filesize',
-      '1M',
-      '--color',
-      'never',
+      '--max-count', '50',
+      '--max-filesize', '1M',
+      '--color', 'never',
+      '--glob', '!node_modules/**',
+      '--glob', '!.git/**',
+      '--glob', '!dist/**',
+      '--glob', '!build/**',
+      '--glob', '!out/**',
+      '--glob', '!.next/**',
+      '--glob', '!.nuxt/**',
+      '--glob', '!coverage/**',
+      '--glob', '!.cache/**',
+      '--glob', '!vendor/**',
+      '--glob', '!**/*.min.js',
+      '--glob', '!**/*.map',
+      '--glob', '!**/*.lock',
       '--',
       query,
       rootPath,

@@ -9,7 +9,6 @@ import { TerminalManager } from './components/Terminal/TerminalManager'
 import { SearchPalette } from './components/Search/SearchPalette'
 import { ActivityBar } from './components/ActivityBar'
 import { GitPanel } from './components/Git/GitPanel'
-import { AgentsPanel } from './components/Agents/AgentsPanel'
 import { KanbanPanel } from './components/Kanban/KanbanPanel'
 import { ProblemsPanel } from './components/Problems/ProblemsPanel'
 import { SettingsModal } from './components/Settings/SettingsModal'
@@ -244,7 +243,8 @@ function App() {
     [],
   )
   const [paletteIndex, setPaletteIndex] = useState(0)
-  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'agents' | 'kanban'>('explorer')
+  const [paletteSearching, setPaletteSearching] = useState(false)
+  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'kanban'>('explorer')
   const [problems, setProblems] = useState<ProblemItem[]>([])
   const [showProblems, setShowProblems] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
@@ -1395,7 +1395,7 @@ function App() {
 
   useEffect(() => {
     const savedPanel = localStorage.getItem(sidePanelKey)
-    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'agents' || savedPanel === 'kanban') {
+    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'kanban') {
       setSidePanel(savedPanel)
     }
   }, [])
@@ -1648,11 +1648,8 @@ function App() {
     }
   }, [projects, activeProjectId])
 
+  // file / symbol / line modes — synchronous filtering
   useEffect(() => {
-    if (!paletteMode) {
-      return
-    }
-
     if (paletteMode === 'file') {
       const query = paletteQuery.toLowerCase()
       const filtered = fileList.filter((item) => item.path.toLowerCase().includes(query))
@@ -1660,13 +1657,10 @@ function App() {
       setPaletteIndex(0)
       return
     }
-
     if (paletteMode === 'symbol') {
       const query = paletteQuery.toLowerCase()
       const filtered = symbolItems.filter((item) => {
-        if (!query) {
-          return true
-        }
+        if (!query) return true
         const haystack = `${item.name} ${item.detail ?? ''} ${item.containerName ?? ''}`.toLowerCase()
         return haystack.includes(query)
       })
@@ -1674,27 +1668,50 @@ function App() {
       setPaletteIndex(0)
       return
     }
-
     if (paletteMode === 'line') {
       setPaletteResults([])
       setPaletteIndex(0)
+    }
+  }, [paletteMode, paletteQuery, fileList, symbolItems])
+
+  // search mode — async IPC call with proper cancellation
+  useEffect(() => {
+    if (paletteMode !== 'search') {
       return
     }
 
-    if (!activeProject?.rootPath || !window.ide) {
+    const rootPath = activeProject?.rootPath
+    const trimmed = paletteQuery.trim()
+
+    if (!rootPath || !window.ide || trimmed.length < 2) {
       setPaletteResults([])
+      setPaletteSearching(false)
       return
     }
+
+    let cancelled = false
+    setPaletteSearching(true)
 
     const handle = setTimeout(async () => {
-      const results = await window.ide.searchInFiles(activeProject.rootPath, paletteQuery)
-      const next = results.map((result) => ({ ...result, kind: 'search' as const }))
-      setPaletteResults(next)
-      setPaletteIndex(0)
-    }, 200)
+      try {
+        const raw = await window.ide.searchInFiles(rootPath, trimmed)
+        if (cancelled) return
+        const next = raw.map((r) => ({ ...r, kind: 'search' as const }))
+        setPaletteResults(next)
+        setPaletteIndex(0)
+      } catch {
+        if (!cancelled) setPaletteResults([])
+      } finally {
+        if (!cancelled) setPaletteSearching(false)
+      }
+    }, 300)
 
-    return () => clearTimeout(handle)
-  }, [paletteMode, paletteQuery, fileList, activeProject, symbolItems])
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+      setPaletteSearching(false)
+    }
+  }, [paletteMode, paletteQuery, activeProject?.rootPath])
 
   useEffect(() => {
     if (paletteMode !== 'symbol') {
@@ -1861,8 +1878,6 @@ function App() {
                 onOpenRemote={handleOpenRemote}
                 isElectron={isElectron}
               />
-            ) : sidePanel === 'agents' ? (
-              <AgentsPanel />
             ) : (
               <FileTree
                 rootPath={activeProject?.rootPath || null}
@@ -1994,6 +2009,7 @@ function App() {
           query={paletteQuery}
           results={paletteResults}
           selectedIndex={paletteIndex}
+          isSearching={paletteSearching}
           onQueryChange={setPaletteQuery}
           onMoveSelection={setPaletteIndex}
           onClose={() => setPaletteMode(null)}

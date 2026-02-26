@@ -1,4 +1,4 @@
-type ActivityTab = 'explorer' | 'git' | 'agents' | 'kanban'
+type ActivityTab = 'explorer' | 'git' | 'kanban'
 
 type ActivityBarProps = {
   active: ActivityTab
@@ -54,22 +54,6 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
             <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400" />
           )
         ) : null}
-      </button>
-
-      {/* Agents */}
-      <button
-        type="button"
-        onClick={() => onChange('agents')}
-        className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold ${
-          active === 'agents'
-            ? 'bg-white/10 text-white'
-            : 'text-white/50 hover:bg-white/5 hover:text-white/80'
-        }`}
-        title="Agents (Cmd/Ctrl + B)"
-      >
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-          <path d="M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm-7 16a5 5 0 1 1 10 0v2H5v-2zm14-7a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm-1 7h4a2 2 0 0 1 2 2v0h-8a2 2 0 0 1 2-2z" />
-        </svg>
       </button>
 
       {/* Kanban */}

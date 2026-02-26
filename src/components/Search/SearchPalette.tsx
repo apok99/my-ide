@@ -8,6 +8,7 @@ type SearchPaletteProps = {
   query: string
   results: Array<FileItem | SearchResult | SymbolItem>
   selectedIndex: number
+  isSearching?: boolean
   onQueryChange: (value: string) => void
   onSelect: (item: FileItem | SearchResult | SymbolItem) => void
   onLineSubmit?: (value: string) => void
@@ -20,6 +21,7 @@ export function SearchPalette({
   query,
   results,
   selectedIndex,
+  isSearching,
   onQueryChange,
   onSelect,
   onLineSubmit,
@@ -32,21 +34,32 @@ export function SearchPalette({
     inputRef.current?.focus()
   }, [mode])
 
+  const showSearchHint = mode === 'search' && query.trim().length < 2 && !isSearching
+
+  const emptyMessage = () => {
+    if (mode === 'line') return 'Type a line number, e.g. 42 or 42:7'
+    if (showSearchHint) return 'Type at least 2 characters to search'
+    if (isSearching) return null
+    return 'No results'
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6">
       <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-[#1e1e1e] shadow-2xl">
-        <div className="border-b border-white/10 px-4 py-3">
+
+        {/* Input row */}
+        <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
           <input
             ref={inputRef}
-            className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+            className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
             placeholder={
               mode === 'file'
-                ? 'Open file (Ctrl+Shift+O / Cmd+Shift+O)'
+                ? 'Open file...'
                 : mode === 'search'
-                  ? 'Search in files (Ctrl+Shift+F / Cmd+Shift+F)'
+                  ? 'Search in files...'
                   : mode === 'symbol'
-                    ? 'Go to symbol (Ctrl+T / Cmd+T)'
-                    : 'Go to line (Ctrl+G / Cmd+G)'
+                    ? 'Go to symbol...'
+                    : 'Go to line, e.g. 42 or 42:7'
             }
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
@@ -58,17 +71,13 @@ export function SearchPalette({
               }
               if (event.key === 'ArrowDown') {
                 event.preventDefault()
-                if (results.length === 0) {
-                  return
-                }
+                if (results.length === 0) return
                 onMoveSelection(Math.min(selectedIndex + 1, results.length - 1))
                 return
               }
               if (event.key === 'ArrowUp') {
                 event.preventDefault()
-                if (results.length === 0) {
-                  return
-                }
+                if (results.length === 0) return
                 onMoveSelection(Math.max(selectedIndex - 1, 0))
                 return
               }
@@ -84,29 +93,60 @@ export function SearchPalette({
               }
             }}
           />
+
+          {/* Searching spinner */}
+          {isSearching && (
+            <svg
+              className="h-4 w-4 shrink-0 animate-spin text-white/30"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+          )}
+
+          {/* Result count */}
+          {!isSearching && results.length > 0 && mode === 'search' && (
+            <span className="shrink-0 text-[10px] text-white/25">{results.length} matches</span>
+          )}
         </div>
+
+        {/* Results list */}
         <div className="max-h-[60vh] overflow-auto">
           {results.length === 0 ? (
             <div className="px-4 py-6 text-sm text-white/40">
-              {mode === 'line' ? 'Type a line number, e.g. 42 or 42:7' : 'No results'}
+              {isSearching
+                ? <span className="text-white/30">Searching…</span>
+                : emptyMessage()
+              }
             </div>
           ) : (
             results.map((item, index) => {
               const isActive = index === selectedIndex
               if (item.kind === 'search') {
+                // Make the filePath relative for display
+                const displayPath = item.filePath.includes('/')
+                  ? item.filePath.split('/').slice(-2).join('/')
+                  : item.filePath
                 return (
                   <button
                     type="button"
                     key={`${item.filePath}-${item.line}-${index}`}
                     onClick={() => onSelect(item)}
-                    className={`flex w-full flex-col gap-1 px-4 py-3 text-left text-sm transition-colors ${
+                    className={`flex w-full flex-col gap-0.5 px-4 py-2.5 text-left text-sm transition-colors ${
                       isActive ? 'bg-blue-600/20 text-white' : 'text-white/70 hover:bg-white/5'
                     }`}
                   >
-                    <span className="text-xs text-white/50">
-                      {item.filePath} : {item.line}
-                    </span>
-                    <span className="truncate">{item.text}</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-xs text-white/50">{displayPath}</span>
+                      <span className="shrink-0 font-mono text-[10px] text-white/25">:{item.line}</span>
+                    </div>
+                    <span className="truncate text-[13px]">{item.text}</span>
                   </button>
                 )
               }
