@@ -1,4 +1,4 @@
-type ActivityTab = 'explorer' | 'git' | 'agents'
+type ActivityTab = 'explorer' | 'git' | 'agents' | 'kanban'
 
 type ActivityBarProps = {
   active: ActivityTab
@@ -11,6 +11,7 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
   const changeCount = gitStatus?.changes?.length ?? 0
   return (
     <div className="flex h-full w-12 flex-col items-center gap-2 border-r border-white/5 bg-[#0f1015] py-3">
+      {/* Explorer */}
       <button
         type="button"
         onClick={() => onChange('explorer')}
@@ -26,6 +27,8 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
           <path d="M3 10h20v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8z" />
         </svg>
       </button>
+
+      {/* Git */}
       <button
         type="button"
         onClick={() => onChange('git')}
@@ -52,6 +55,8 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
           )
         ) : null}
       </button>
+
+      {/* Agents */}
       <button
         type="button"
         onClick={() => onChange('agents')}
@@ -64,6 +69,25 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
           <path d="M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm-7 16a5 5 0 1 1 10 0v2H5v-2zm14-7a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm-1 7h4a2 2 0 0 1 2 2v0h-8a2 2 0 0 1 2-2z" />
+        </svg>
+      </button>
+
+      {/* Kanban */}
+      <button
+        type="button"
+        onClick={() => onChange('kanban')}
+        className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold ${
+          active === 'kanban'
+            ? 'bg-white/10 text-white'
+            : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+        }`}
+        title="Agent Kanban"
+      >
+        {/* Kanban columns icon */}
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+          <rect x="2" y="3" width="5" height="18" rx="1.5" opacity="0.9" />
+          <rect x="9.5" y="3" width="5" height="12" rx="1.5" opacity="0.9" />
+          <rect x="17" y="3" width="5" height="7" rx="1.5" opacity="0.9" />
         </svg>
       </button>
     </div>

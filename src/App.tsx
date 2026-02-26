@@ -10,7 +10,9 @@ import { SearchPalette } from './components/Search/SearchPalette'
 import { ActivityBar } from './components/ActivityBar'
 import { GitPanel } from './components/Git/GitPanel'
 import { AgentsPanel } from './components/Agents/AgentsPanel'
+import { KanbanPanel } from './components/Kanban/KanbanPanel'
 import { ProblemsPanel } from './components/Problems/ProblemsPanel'
+import { SettingsModal } from './components/Settings/SettingsModal'
 
 type ProjectState = {
   id: string
@@ -242,9 +244,10 @@ function App() {
     [],
   )
   const [paletteIndex, setPaletteIndex] = useState(0)
-  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'agents'>('explorer')
+  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'agents' | 'kanban'>('explorer')
   const [problems, setProblems] = useState<ProblemItem[]>([])
   const [showProblems, setShowProblems] = useState(true)
+  const [showSettings, setShowSettings] = useState(false)
   const [symbolItems, setSymbolItems] = useState<SymbolItem[]>([])
   const lastShiftTimeRef = useRef<number | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -1372,6 +1375,11 @@ function App() {
     setPaletteIndex(0)
   }, [])
 
+  const openSettings = useCallback(() => {
+    setPaletteMode(null)
+    setShowSettings(true)
+  }, [])
+
   const closeProject = useCallback((projectId: string) => {
     setProjects((prev) => {
       const remaining = prev.filter((project) => project.id !== projectId)
@@ -1387,7 +1395,7 @@ function App() {
 
   useEffect(() => {
     const savedPanel = localStorage.getItem(sidePanelKey)
-    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'agents') {
+    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'agents' || savedPanel === 'kanban') {
       setSidePanel(savedPanel)
     }
   }, [])
@@ -1427,6 +1435,17 @@ function App() {
         setPaletteIndex(0)
         return
       }
+      if (isMod && key === ',') {
+        event.preventDefault()
+        setShowSettings((prev) => {
+          if (prev) {
+            return false
+          }
+          setPaletteMode(null)
+          return true
+        })
+        return
+      }
       if (isMod && key === 'b') {
         event.preventDefault()
         setSidePanel('agents')
@@ -1447,6 +1466,11 @@ function App() {
         setShowProblems((prev) => !prev)
         return
       }
+      if (key === 'escape' && showSettings) {
+        event.preventDefault()
+        setShowSettings(false)
+        return
+      }
       if (key === 'escape' && paletteMode) {
         event.preventDefault()
         setPaletteMode(null)
@@ -1460,7 +1484,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [handleSave, fileList, openLinePalette, openSymbolPalette, paletteMode])
+  }, [handleSave, fileList, openLinePalette, openSymbolPalette, paletteMode, showSettings])
 
   useEffect(() => {
     const handleFocus = () => {
@@ -1787,6 +1811,13 @@ function App() {
         >
           Nuevo proyecto
         </button>
+        <button
+          onClick={openSettings}
+          className="rounded-md border border-white/10 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+          title="Ajustes (Cmd/Ctrl + ,)"
+        >
+          Ajustes
+        </button>
       </div>
       <div className="flex-1 overflow-hidden h-full relative">
         <Layout
@@ -1933,23 +1964,27 @@ function App() {
             </div>
           }
           terminal={
-            <div className="h-full w-full">
-              {projects.length === 0 ? (
-                <TerminalManager isActive />
-              ) : (
-                projects.map((project) => (
-                  <div
-                    key={project.id}
-                    className={`h-full w-full ${project.id === activeProjectId ? 'block' : 'hidden'}`}
-                  >
-                    <TerminalManager
-                      isActive={project.id === activeProjectId}
-                      rootPath={project.rootPath}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
+            sidePanel === 'kanban' ? (
+              <KanbanPanel rootPath={activeProject?.rootPath ?? null} />
+            ) : (
+              <div className="h-full w-full">
+                {projects.length === 0 ? (
+                  <TerminalManager isActive />
+                ) : (
+                  projects.map((project) => (
+                    <div
+                      key={project.id}
+                      className={`h-full w-full ${project.id === activeProjectId ? 'block' : 'hidden'}`}
+                    >
+                      <TerminalManager
+                        isActive={project.id === activeProjectId}
+                        rootPath={project.rootPath}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            )
           }
         />
       </div>
@@ -1996,6 +2031,7 @@ function App() {
           }}
         />
       )}
+      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   )
 }
