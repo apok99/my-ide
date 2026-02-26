@@ -1,0 +1,89 @@
+{
+  "feature": {
+    "id": "agent-work-tracker",
+    "enabled": true,
+    "version": "1.0.0",
+    "name": {
+      "es": "Trabajo de agentes",
+      "en": "Agent work"
+    },
+    "mount": {
+      "route": "/agents",
+      "navLabel": {
+        "es": "Agentes",
+        "en": "Agents"
+      },
+      "icon": "bot"
+    },
+    "layout3Panel": {
+      "left": {
+        "component": "AgentFilters",
+        "sections": ["status", "owner", "repo", "priority", "search"]
+      },
+      "center": {
+        "component": "AgentTaskBoard",
+        "mode": "kanban",
+        "columns": ["pending", "in_progress", "blocked", "completed"]
+      },
+      "right": {
+        "component": "AgentDetail",
+        "tabs": ["summary", "files", "logs", "timeline"]
+      }
+    },
+    "data": {
+      "snapshotEndpoint": "/api/agents/snapshot",
+      "historyEndpoint": "/api/agents/history",
+      "ws": {
+        "enabled": true,
+        "url": "ws://localhost:8787/agents",
+        "events": [
+          "agent.started",
+          "agent.updated",
+          "agent.blocked",
+          "agent.completed",
+          "agent.log"
+        ],
+        "reconnectMs": 2000
+      },
+      "pollingFallbackMs": 5000
+    }
+  },
+  "seed": {
+    "agents": [
+      {
+        "id": "ag_front_01",
+        "name": "Front UI Agent",
+        "status": "in_progress",
+        "task": "Modal de correo acta provisional",
+        "repo": "front",
+        "branch": "feat/email-modal-preview",
+        "activeFile": "front/src/pages/admin/ApplicationsList.jsx",
+        "etaMinutes": 18,
+        "updatedAt": "2026-02-12T10:22:00Z"
+      },
+      {
+        "id": "ag_back_01",
+        "name": "Back Mail Agent",
+        "status": "blocked",
+        "task": "Plantilla bilingue de recordatorio",
+        "repo": "back",
+        "branch": "feat/reminder-mail-i18n",
+        "activeFile": "back/resources/views/emails/application-reminder.blade.php",
+        "blocker": "Falta variable {deadline} en payload",
+        "etaMinutes": null,
+        "updatedAt": "2026-02-12T10:20:00Z"
+      },
+      {
+        "id": "ag_qa_01",
+        "name": "QA Agent",
+        "status": "pending",
+        "task": "Smoke tests admin/applications wizard",
+        "repo": "front",
+        "branch": "qa/applications-wizard",
+        "activeFile": null,
+        "etaMinutes": 30,
+        "updatedAt": "2026-02-12T10:18:00Z"
+      }
+    ]
+  }
+}

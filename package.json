@@ -2,6 +2,7 @@
   "name": "deivids-magic-studio",
   "private": true,
   "version": "0.0.0",
+  "author": "David Victoria Martinez",
   "type": "module",
   "main": "electron/dist/main.js",
   "scripts": {

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('ide', {
   openFolderByPath: (path) => ipcRenderer.invoke('ide:open-folder-path', path),
   openFile: () => ipcRenderer.invoke('ide:open-file'),
   readFile: (filePath) => ipcRenderer.invoke('ide:read-file', filePath),
+  readAgentsWork: () => ipcRenderer.invoke('ide:read-agents-work'),
   writeFile: (filePath, content) =>
     ipcRenderer.invoke('ide:write-file', filePath, content),
   createFile: (rootPath, dirPath, name) =>

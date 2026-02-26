@@ -11,6 +11,10 @@ declare global {
         | null
       >
       readFile: (filePath: string) => Promise<string>
+      readAgentsWork: () => Promise<
+        | { ok: true; content: string; sourcePath: string }
+        | { ok: false; error: string }
+      >
       writeFile: (filePath: string, content: string) => Promise<boolean>
       createFile: (
         rootPath: string,

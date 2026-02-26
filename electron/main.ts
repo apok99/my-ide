@@ -10,33 +10,9 @@ import { spawn } from 'node:child_process'
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const ignoredFolders = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'out',
-  'vendor',
-  'storage',
-  'bootstrap',
-])
-const ignoredExtensions = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.svg',
-  '.webp',
-  '.mp4',
-  '.mp3',
-  '.woff',
-  '.woff2',
-  '.ttf',
-  '.ico',
-  '.zip',
-  '.gz',
-  '.tar',
-  '.map',
-])
+const ignoredFolders = new Set<string>([])
+const ignoredExtensions = new Set<string>([])
+const treeDepthLimit = 64
 
 const runGit = (cwd: string, args: string[]) => {
   return new Promise<{ ok: boolean; stdout: string; stderr: string }>((resolve) => {
@@ -180,7 +156,55 @@ type FileNode = {
   children?: FileNode[]
 }
 
+type AgentsWorkReadResult =
+  | {
+      ok: true
+      content: string
+      sourcePath: string
+    }
+  | {
+      ok: false
+      error: string
+    }
+
 const terminals = new Map<string, pty.IPty>()
+
+const getAgentsWorkCandidates = () => {
+  const appPath = app.getAppPath()
+  const cwd = process.cwd()
+  const fromEnv = process.env.AGENTS_WORK_PATH?.trim()
+  return [
+    fromEnv || '',
+    path.join(cwd, 'agents-work.json'),
+    path.join(appPath, 'agents-work.json'),
+  ]
+}
+
+const readAgentsWorkSnapshot = async (): Promise<AgentsWorkReadResult> => {
+  const seen = new Set<string>()
+  const candidates = getAgentsWorkCandidates()
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) {
+      continue
+    }
+    seen.add(candidate)
+    try {
+      const stat = await fs.stat(candidate)
+      if (!stat.isFile()) {
+        continue
+      }
+      const content = await fs.readFile(candidate, 'utf8')
+      return { ok: true, content, sourcePath: candidate }
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return {
+    ok: false,
+    error: `No se encontró agents-work.json. Rutas revisadas: ${Array.from(seen).join(', ')}`,
+  }
+}
 
 const readDirRecursive = async (dirPath: string, depth: number): Promise<FileNode[]> => {
   if (depth < 0) {
@@ -385,7 +409,7 @@ app.whenReady().then(() => {
     }
 
     const rootPath = result.filePaths[0]
-    const tree = await readDirRecursive(rootPath, 4)
+    const tree = await readDirRecursive(rootPath, treeDepthLimit)
     return { rootPath, tree }
   })
 
@@ -399,7 +423,7 @@ app.whenReady().then(() => {
       return null
     }
 
-    const tree = await readDirRecursive(folderPath, 4)
+    const tree = await readDirRecursive(folderPath, treeDepthLimit)
     return { rootPath: folderPath, tree }
   })
 
@@ -415,13 +439,17 @@ app.whenReady().then(() => {
     const filePath = result.filePaths[0]
     const content = await fs.readFile(filePath, 'utf8')
     const rootPath = path.dirname(filePath)
-    const tree = await readDirRecursive(rootPath, 4)
+    const tree = await readDirRecursive(rootPath, treeDepthLimit)
     return { filePath, content, rootPath, tree }
   })
 
   ipcMain.handle('ide:read-file', async (_event, filePath: string) => {
     const content = await fs.readFile(filePath, 'utf8')
     return content
+  })
+
+  ipcMain.handle('ide:read-agents-work', async () => {
+    return readAgentsWorkSnapshot()
   })
 
   ipcMain.handle('ide:write-file', async (_event, filePath: string, content: string) => {
@@ -652,7 +680,7 @@ app.whenReady().then(() => {
     if (!branchName) {
       return { ok: false, error: 'Missing branch name' }
     }
-    const merge = await runGit(rootPath, ['merge', branchName])
+    const merge = await runGit(rootPath, ['merge', '--allow-unrelated-histories', branchName])
     return { ok: merge.ok, error: merge.ok ? undefined : merge.stderr || merge.stdout }
   })
 

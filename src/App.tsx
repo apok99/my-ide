@@ -9,6 +9,7 @@ import { TerminalManager } from './components/Terminal/TerminalManager'
 import { SearchPalette } from './components/Search/SearchPalette'
 import { ActivityBar } from './components/ActivityBar'
 import { GitPanel } from './components/Git/GitPanel'
+import { AgentsPanel } from './components/Agents/AgentsPanel'
 import { ProblemsPanel } from './components/Problems/ProblemsPanel'
 
 type ProjectState = {
@@ -241,7 +242,7 @@ function App() {
     [],
   )
   const [paletteIndex, setPaletteIndex] = useState(0)
-  const [sidePanel, setSidePanel] = useState<'explorer' | 'git'>('explorer')
+  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'agents'>('explorer')
   const [problems, setProblems] = useState<ProblemItem[]>([])
   const [showProblems, setShowProblems] = useState(true)
   const [symbolItems, setSymbolItems] = useState<SymbolItem[]>([])
@@ -1027,34 +1028,45 @@ function App() {
     if (!window.ide || !activeProject?.rootPath) {
       return
     }
+    const branchesPromise = window.ide.gitBranches
+      ? window.ide.gitBranches(activeProject.rootPath)
+      : Promise.resolve({ ok: false, branches: [] as string[], error: 'Git branches no disponible' })
+
     const [status, info, branchesResult] = await Promise.all([
       window.ide.gitStatus(activeProject.rootPath),
       window.ide.gitInfo(activeProject.rootPath),
-      window.ide.gitBranches(activeProject.rootPath),
+      branchesPromise,
     ])
+
+    const branchList =
+      branchesResult.ok && branchesResult.branches.length > 0
+        ? branchesResult.branches
+        : info.branch
+          ? [info.branch]
+          : []
     updateProject(activeProject.id, (project) => ({
       ...project,
       gitStatus: status,
       gitBranch: info.branch,
-      gitBranches: branchesResult.ok ? branchesResult.branches : project.gitBranches,
+      gitBranches: branchList.length > 0 ? branchList : project.gitBranches,
       gitSelectedBranch: (() => {
-        if (branchesResult.ok) {
-          if (project.gitSelectedBranch && branchesResult.branches.includes(project.gitSelectedBranch)) {
+        if (branchList.length > 0) {
+          if (project.gitSelectedBranch && branchList.includes(project.gitSelectedBranch)) {
             return project.gitSelectedBranch
           }
-          if (info.branch && branchesResult.branches.includes(info.branch)) {
+          if (info.branch && branchList.includes(info.branch)) {
             return info.branch
           }
-          return branchesResult.branches[0] ?? ''
+          return branchList[0] ?? ''
         }
         return project.gitSelectedBranch || info.branch
       })(),
       gitMergeSource: (() => {
-        if (branchesResult.ok) {
-          if (project.gitMergeSource && branchesResult.branches.includes(project.gitMergeSource)) {
+        if (branchList.length > 0) {
+          if (project.gitMergeSource && branchList.includes(project.gitMergeSource)) {
             return project.gitMergeSource
           }
-          const fallback = branchesResult.branches.find((item) => item !== info.branch)
+          const fallback = branchList.find((item) => item !== info.branch)
           return fallback ?? ''
         }
         return project.gitMergeSource
@@ -1375,7 +1387,7 @@ function App() {
 
   useEffect(() => {
     const savedPanel = localStorage.getItem(sidePanelKey)
-    if (savedPanel === 'git' || savedPanel === 'explorer') {
+    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'agents') {
       setSidePanel(savedPanel)
     }
   }, [])
@@ -1413,6 +1425,11 @@ function App() {
         setPaletteQuery('')
         setPaletteResults([])
         setPaletteIndex(0)
+        return
+      }
+      if (isMod && key === 'b') {
+        event.preventDefault()
+        setSidePanel('agents')
         return
       }
       if (isMod && key === 't') {
@@ -1813,6 +1830,8 @@ function App() {
                 onOpenRemote={handleOpenRemote}
                 isElectron={isElectron}
               />
+            ) : sidePanel === 'agents' ? (
+              <AgentsPanel />
             ) : (
               <FileTree
                 rootPath={activeProject?.rootPath || null}

@@ -135,91 +135,6 @@ export function GitPanel(props: GitPanelProps) {
 
       <div className="flex-1 overflow-auto px-4 py-4 text-xs text-white/70">
         <div className="mb-4 rounded border border-white/10 bg-white/5 px-3 py-3">
-          <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Ramas</label>
-          <div className="mt-2 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <select
-                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
-                value={selectedBranch}
-                onChange={(event) => onSelectBranch(event.target.value)}
-                disabled={!status?.isRepo || branches.length === 0}
-              >
-                {branches.length === 0 ? (
-                  <option value="">Sin ramas</option>
-                ) : (
-                  branches.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                      {item === branch ? ' (actual)' : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                onClick={() => onCheckoutBranch(selectedBranch)}
-                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                title="Checkout"
-                disabled={!status?.isRepo || !selectedBranch || selectedBranch === branch}
-              >
-                Checkout
-              </button>
-            </div>
-            <div className="flex flex-col gap-2">
-              <input
-                className="w-full rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
-                placeholder="Nueva rama"
-                value={newBranch}
-                onChange={(event) => setNewBranch(event.target.value)}
-                disabled={!status?.isRepo}
-              />
-              <button
-                onClick={() => {
-                  const trimmed = newBranch.trim()
-                  if (!trimmed) {
-                    return
-                  }
-                  onCreateBranch(trimmed)
-                  setNewBranch('')
-                }}
-                className="w-full rounded border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-100 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                title="Crear rama"
-                disabled={!status?.isRepo || !newBranch.trim()}
-              >
-                Crear
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
-                value={mergeSource}
-                onChange={(event) => onSelectMergeSource(event.target.value)}
-                disabled={!status?.isRepo || branches.length === 0}
-              >
-                {branches.length === 0 ? (
-                  <option value="">Sin ramas</option>
-                ) : (
-                  branches
-                    .filter((item) => item !== selectedBranch)
-                    .map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))
-                )}
-              </select>
-              <button
-                onClick={onMergeBranches}
-                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                title="Merge"
-                disabled={!status?.isRepo || !mergeSource || !selectedBranch || mergeSource === selectedBranch}
-              >
-                Merge
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded border border-white/10 bg-white/5 px-3 py-3">
           <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Mensaje</label>
           <textarea
             className="mt-2 min-h-[72px] w-full resize-none rounded border border-white/10 bg-transparent px-2 py-2 text-xs text-white/80 outline-none focus:border-emerald-500/40"
@@ -295,10 +210,96 @@ export function GitPanel(props: GitPanelProps) {
         ) : null}
 
         {log ? (
-          <div className="mt-3 rounded border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/60">
+          <div className="mb-4 mt-3 rounded border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/60">
             {log}
           </div>
         ) : null}
+
+        <div className="mb-4 rounded border border-white/10 bg-white/5 px-3 py-3">
+          <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Ramas</label>
+          <div className="mt-2 flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
+              <select
+                className="w-full rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                value={selectedBranch}
+                onChange={(event) => onSelectBranch(event.target.value)}
+                disabled={!status?.isRepo || branches.length === 0}
+              >
+                {branches.length === 0 ? (
+                  <option value="">Sin ramas</option>
+                ) : (
+                  branches.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                      {item === branch ? ' (actual)' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                onClick={() => onCheckoutBranch(selectedBranch)}
+                className="w-full rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Checkout"
+                disabled={!status?.isRepo || !selectedBranch || selectedBranch === branch}
+              >
+                Checkout
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                className="w-full rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                placeholder="Nueva rama"
+                value={newBranch}
+                onChange={(event) => setNewBranch(event.target.value)}
+                disabled={!status?.isRepo}
+              />
+              <button
+                onClick={() => {
+                  const trimmed = newBranch.trim()
+                  if (!trimmed) {
+                    return
+                  }
+                  onCreateBranch(trimmed)
+                  setNewBranch('')
+                }}
+                className="w-full rounded border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-100 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Crear rama"
+                disabled={!status?.isRepo || !newBranch.trim()}
+              >
+                Crear
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-white/80 outline-none focus:border-emerald-500/40"
+                value={mergeSource}
+                onChange={(event) => onSelectMergeSource(event.target.value)}
+                disabled={!status?.isRepo || branches.length === 0}
+              >
+                {branches.length === 0 ? (
+                  <option value="">Sin ramas</option>
+                ) : (
+                  branches
+                    .filter((item) => item !== selectedBranch)
+                    .map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))
+                )}
+              </select>
+              <button
+                onClick={onMergeBranches}
+                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Merge"
+                disabled={!status?.isRepo || !mergeSource || !selectedBranch || mergeSource === selectedBranch}
+              >
+                Merge
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   )
