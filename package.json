@@ -1,7 +1,7 @@
 {
   "name": "deivids-magic-studio",
   "private": true,
-  "version": "1.1.2",
+  "version": "1.2.3",
   "author": "David Victoria Martinez",
   "type": "module",
   "main": "electron/dist/main.js",
