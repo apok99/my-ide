@@ -1,4 +1,4 @@
-type ActivityTab = 'explorer' | 'git' | 'kanban'
+type ActivityTab = 'explorer' | 'git' | 'kanban' | 'ops'
 
 type ActivityBarProps = {
   active: ActivityTab
@@ -72,6 +72,22 @@ export function ActivityBar({ active, onChange, gitStatus }: ActivityBarProps) {
           <rect x="2" y="3" width="5" height="18" rx="1.5" opacity="0.9" />
           <rect x="9.5" y="3" width="5" height="12" rx="1.5" opacity="0.9" />
           <rect x="17" y="3" width="5" height="7" rx="1.5" opacity="0.9" />
+        </svg>
+      </button>
+
+      {/* Ops */}
+      <button
+        type="button"
+        onClick={() => onChange('ops')}
+        className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold ${
+          active === 'ops'
+            ? 'bg-white/10 text-white'
+            : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+        }`}
+        title="Automation Ops"
+      >
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+          <path d="M13.9 2.5a1 1 0 0 0-1.8 0l-.7 1.7a7.7 7.7 0 0 0-1.7.7l-1.7-.7a1 1 0 0 0-1.3.5l-1 1.8a1 1 0 0 0 .3 1.3l1.5 1a8.5 8.5 0 0 0 0 2l-1.5 1a1 1 0 0 0-.3 1.3l1 1.8a1 1 0 0 0 1.3.5l1.7-.7c.5.3 1.1.5 1.7.7l.7 1.7a1 1 0 0 0 1.8 0l.7-1.7c.6-.2 1.2-.4 1.7-.7l1.7.7a1 1 0 0 0 1.3-.5l1-1.8a1 1 0 0 0-.3-1.3l-1.5-1a8.5 8.5 0 0 0 0-2l1.5-1a1 1 0 0 0 .3-1.3l-1-1.8a1 1 0 0 0-1.3-.5l-1.7.7a7.7 7.7 0 0 0-1.7-.7l-.7-1.7zM13 9a3 3 0 1 1-2 5.2A3 3 0 0 1 13 9z" />
         </svg>
       </button>
     </div>

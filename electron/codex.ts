@@ -1,9 +1,34 @@
-import * as pty from 'node-pty'
+import { spawn } from 'node:child_process'
 
-export const runCodex = (prompt: string, cwd: string) => {
+type AiProvider = 'codex' | 'claude'
+
+const resolveCliCommand = (provider: AiProvider) => {
+  if (provider === 'claude') {
+    return process.env.CLAUDE_CMD || 'claude'
+  }
+  return process.env.CODEX_CMD || 'codex'
+}
+
+const stripAnsi = (value: string) =>
+  value
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001B\][^\u0007]*(\u0007|\u001B\\)/g, '')
+    .replace(/\u001B[PX^_].*?\u001B\\/g, '')
+    .replace(/\u001B[@-_]/g, '')
+
+const getArgsForProvider = (provider: AiProvider, prompt: string) => {
+  if (provider === 'claude') {
+    return ['--print', '--permission-mode', 'bypassPermissions', prompt]
+  }
+  return ['exec', '--color', 'never', '--skip-git-repo-check', '--full-auto', prompt]
+}
+
+export const runCodex = (prompt: string, cwd: string, provider: AiProvider = 'codex') => {
   return new Promise<{ ok: boolean; output?: string; error?: string }>((resolve) => {
-    const cmd = process.env.CODEX_CMD || 'codex'
-    let output = ''
+    const cmd = resolveCliCommand(provider)
+    const args = getArgsForProvider(provider, prompt)
+    let stdout = ''
+    let stderr = ''
     let resolved = false
 
     const finish = (payload: { ok: boolean; output?: string; error?: string }) => {
@@ -15,35 +40,40 @@ export const runCodex = (prompt: string, cwd: string) => {
     }
 
     try {
-      const proc = pty.spawn(cmd, [], {
+      const proc = spawn(cmd, args, {
         cwd,
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
         env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
 
       const timeout = setTimeout(() => {
-        proc.kill()
-        finish({ ok: false, output, error: 'Codex timeout' })
-      }, 120000)
+        proc.kill('SIGTERM')
+        const output = stripAnsi(`${stdout}\n${stderr}`.trim())
+        finish({ ok: false, output, error: `${provider} timeout` })
+      }, 180000)
 
-      proc.onData((data) => {
-        output += data
+      proc.stdout.on('data', (data) => {
+        stdout += data.toString()
       })
 
-      proc.onExit(({ exitCode }) => {
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', (error) => {
         clearTimeout(timeout)
-        if (exitCode === 0) {
+        finish({ ok: false, error: String(error), output: stripAnsi(`${stdout}\n${stderr}`.trim()) })
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        const output = stripAnsi(`${stdout}\n${stderr}`.trim())
+        if (code === 0) {
           finish({ ok: true, output })
         } else {
-          finish({ ok: false, output, error: `Exit code ${exitCode}` })
+          finish({ ok: false, output, error: `Exit code ${code}` })
         }
       })
-
-      setTimeout(() => {
-        proc.write(`${prompt}\r`)
-      }, 80)
     } catch (err) {
       finish({ ok: false, error: String(err) })
     }

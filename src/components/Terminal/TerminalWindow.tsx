@@ -8,6 +8,8 @@ interface TerminalWindowProps {
     onFocus: () => void
     onClose: () => void
     cwd?: string
+    title?: string
+    initialCommand?: string
 }
 
 export function TerminalWindow({
@@ -16,11 +18,14 @@ export function TerminalWindow({
     onFocus,
     onClose,
     cwd,
+    title,
+    initialCommand,
 }: TerminalWindowProps) {
     const terminalRef = useRef<HTMLDivElement>(null)
     const terminalInstanceRef = useRef<Terminal | null>(null)
     const fitAddonRef = useRef<FitAddon | null>(null)
     const mountedRef = useRef(false)
+    const commandSentRef = useRef<string | null>(null)
 
     // Mount Terminal - SOLO UNA VEZ
     useEffect(() => {
@@ -47,38 +52,67 @@ export function TerminalWindow({
         fitAddonRef.current = fitAddon
         term.loadAddon(fitAddon)
         term.open(terminalRef.current)
-        fitAddon.fit()
 
         terminalInstanceRef.current = term
 
         // Start terminal
         window.ide.terminalStart(id, cwd)
 
-        // Handle Resize with debouncing
-        let resizeTimeout: ReturnType<typeof setTimeout> | null = null
-        const handleResize = () => {
-            if (resizeTimeout) {
-                clearTimeout(resizeTimeout)
+        // ── Resize logic ────────────────────────────────────────────────────────
+        //
+        // safeFit: the ONLY place we call fitAddon.fit(). Always guards against
+        // calling fit() when the element is invisible (display:none → 0x0), which
+        // is what causes one terminal to collapse while others grow.
+        //
+        const safeFit = () => {
+            const el = terminalRef.current
+            const fit = fitAddonRef.current
+            const tty = terminalInstanceRef.current
+            if (!el || !fit || !tty) return
+            // Guard: skip when element has no real dimensions
+            if (el.offsetWidth === 0 || el.offsetHeight === 0) return
+            try {
+                fit.fit()
+                window.ide.terminalResize(id, tty.cols, tty.rows)
+            } catch {
+                // ignore rare fit errors during rapid resizing
             }
-            resizeTimeout = setTimeout(() => {
-                if (terminalRef.current && fitAddonRef.current && terminalInstanceRef.current) {
-                    try {
-                        fitAddonRef.current.fit()
-                        window.ide.terminalResize(id, terminalInstanceRef.current.cols, terminalInstanceRef.current.rows)
-                    } catch (e) {
-                        // Ignore fit errors during rapid resizing
-                    }
-                }
-            }, 50)
         }
-        window.addEventListener('resize', handleResize)
-        const resizeObserver = new ResizeObserver(() => handleResize())
+
+        // Debounced wrapper so rapid events coalesce into a single call.
+        // 100ms is long enough to let CSS transitions (300ms) emit their last
+        // ResizeObserver event before we call fit().
+        let resizeTimer: ReturnType<typeof setTimeout> | null = null
+        const schedFit = () => {
+            if (resizeTimer) clearTimeout(resizeTimer)
+            resizeTimer = setTimeout(safeFit, 100)
+        }
+
+        // Layer 1 – global resize events (also fired manually on panel/project switch)
+        window.addEventListener('resize', schedFit)
+
+        // Layer 2 – ResizeObserver on the terminal div: catches explorer/editor
+        // panel resizes that don't produce a window resize event
+        const resizeObserver = new ResizeObserver(schedFit)
         resizeObserver.observe(terminalRef.current)
-        setTimeout(handleResize, 100)
+
+        // Layer 3 – IntersectionObserver: fires when the element transitions from
+        // hidden → visible (project switch, kanban toggle, editor hide/show).
+        // This is the most reliable way to catch display:none → block cases.
+        const intersectionObserver = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    schedFit()
+                }
+            }
+        }, { threshold: 0 })
+        intersectionObserver.observe(terminalRef.current)
+
+        // Initial fit – delayed slightly so the layout has had a chance to paint
+        setTimeout(safeFit, 150)
 
         // Handle Input
         term.onData((data) => {
-            console.log(`[Terminal ${id.slice(0, 8)}] ⌨️ Input`)
             window.ide.terminalInput(id, data)
         })
 
@@ -91,13 +125,29 @@ export function TerminalWindow({
         // Cleanup - DON'T reset mountedRef to prevent StrictMode remount issues
         return () => {
             console.log(`[Terminal ${id.slice(0, 8)}] 🧹 Unmounting`)
-            window.removeEventListener('resize', handleResize)
+            window.removeEventListener('resize', schedFit)
             resizeObserver.disconnect()
+            intersectionObserver.disconnect()
+            if (resizeTimer) clearTimeout(resizeTimer)
             // Don't dispose or kill - React StrictMode may remount
             // term.dispose()
             // window.ide.terminalKill(id)
         }
     }, [id])
+
+    useEffect(() => {
+        if (!window.ide || !initialCommand || !mountedRef.current) {
+            return
+        }
+        if (commandSentRef.current === initialCommand) {
+            return
+        }
+        const timer = setTimeout(() => {
+            window.ide.terminalInput(id, `${initialCommand}\r`)
+            commandSentRef.current = initialCommand
+        }, 220)
+        return () => clearTimeout(timer)
+    }, [id, initialCommand])
 
     // Handle Incoming Data
     useEffect(() => {
@@ -115,7 +165,6 @@ export function TerminalWindow({
     // Focus when active - let React handle this with proper timing
     useEffect(() => {
         if (isActive && terminalInstanceRef.current) {
-            // Small delay to ensure DOM is ready
             const timer = setTimeout(() => {
                 terminalInstanceRef.current?.focus()
             }, 50)
@@ -126,7 +175,6 @@ export function TerminalWindow({
     // Simple click handler - notify parent AND force focus on terminal
     const handleClick = useCallback(() => {
         onFocus()
-        // Force focus on xterm instance immediately
         setTimeout(() => {
             terminalInstanceRef.current?.focus()
         }, 0)
@@ -156,7 +204,7 @@ export function TerminalWindow({
                         <path fillRule="evenodd" d="M2 4.25A2.25 2.25 0 014.25 2h11.5A2.25 2.25 0 0118 4.25v11.5A2.25 2.25 0 0115.75 18H4.25A2.25 2.25 0 012 15.75V4.25zm4.03 6.28a.75.75 0 00-1.06-1.06L2.47 12l2.5 2.53a.75.75 0 001.06-1.06L4.53 12l1.5-1.47zM12 12l2.5 2.53a.75.75 0 001.06-1.06L14.53 12l1.5-1.47a.75.75 0 00-1.06-1.06L12.47 12l2.53-2.53z" clipRule="evenodd" />
                         <path d="M7 6a1 1 0 000 2h6a1 1 0 100-2H7z" />
                     </svg>
-                    <span>zsh</span>
+                    <span>{title ?? 'zsh'}</span>
                 </div>
             </div>
 

@@ -70,6 +70,111 @@ const runGit = (cwd: string, args: string[]) => {
   })
 }
 
+const buildAutoCommitMessage = (files: string[]) => {
+  if (files.length === 0) {
+    return 'chore: auto-commit'
+  }
+  const head = files.slice(0, 3).map((item) => path.basename(item)).join(', ')
+  const suffix = files.length > 3 ? ` +${files.length - 3}` : ''
+  return `chore: auto-commit ${files.length} files (${head}${suffix})`
+}
+
+const hasGitRepo = async (cwd: string) => {
+  try {
+    const stat = await fs.stat(path.join(cwd, '.git'))
+    return stat.isDirectory() || stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+const runDirectAutoCommitInRepo = async (cwd: string, label: string) => {
+  const add = await runGit(cwd, ['add', '-A'])
+  if (!add.ok) {
+    return {
+      ok: false,
+      error: add.stderr || add.stdout,
+      output: `[${label}] ${add.stdout || add.stderr}`.trim(),
+    }
+  }
+
+  const staged = await runGit(cwd, ['diff', '--cached', '--name-only'])
+  if (!staged.ok) {
+    return {
+      ok: false,
+      error: staged.stderr || staged.stdout,
+      output: `[${label}] ${staged.stdout || staged.stderr}`.trim(),
+    }
+  }
+
+  const files = staged.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (files.length === 0) {
+    return { ok: true, output: `[${label}] No hay cambios para commit.` }
+  }
+
+  const commitMessage = `${buildAutoCommitMessage(files)} [${label}]`
+  const commit = await runGit(cwd, ['commit', '-m', commitMessage])
+  if (!commit.ok) {
+    return {
+      ok: false,
+      error: commit.stderr || commit.stdout,
+      output: `[${label}] ${commit.stdout || commit.stderr}`.trim(),
+    }
+  }
+
+  const push = await runGit(cwd, ['push'])
+  if (!push.ok) {
+    return {
+      ok: false,
+      error: push.stderr || push.stdout,
+      output: `[${label}] ${`${commit.stdout}\n${push.stdout || push.stderr}`.trim()}`.trim(),
+    }
+  }
+
+  return { ok: true, output: `[${label}] ${`${commit.stdout}\n${push.stdout}`.trim()}`.trim() }
+}
+
+const runDirectAutoCommit = async (cwd: string) => {
+  const outputs: string[] = []
+
+  if (await hasGitRepo(cwd)) {
+    const rootResult = await runDirectAutoCommitInRepo(cwd, 'root')
+    return rootResult
+  }
+
+  let foundAny = false
+  for (const name of ['front', 'back']) {
+    const repoPath = path.join(cwd, name)
+    if (!(await hasGitRepo(repoPath))) {
+      continue
+    }
+    foundAny = true
+    const result = await runDirectAutoCommitInRepo(repoPath, name)
+    outputs.push(result.output)
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error || `Auto-commit fallo en ${name}`,
+        output: outputs.join('\n\n').trim(),
+      }
+    }
+  }
+
+  if (!foundAny) {
+    return {
+      ok: false,
+      error: 'No se encontro .git en raiz ni en front/back.',
+      output: 'No se encontro ningun repositorio git para auto-commit.',
+    }
+  }
+
+  return { ok: true, output: outputs.join('\n\n').trim() }
+}
+
 const getDefaultPath = () => {
   if (process.platform === 'darwin') {
     return '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
@@ -211,6 +316,47 @@ type AgentsWorkReadResult =
     }
 
 const terminals = new Map<string, pty.IPty>()
+
+const forceKillTerminal = (terminal: pty.IPty) => {
+  const pid = Number((terminal as { pid?: number }).pid)
+
+  try {
+    terminal.kill('SIGKILL')
+  } catch {
+    try {
+      terminal.kill()
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return
+  }
+
+  if (process.platform === 'win32') {
+    try {
+      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+      killer.on('error', () => {
+        // ignore
+      })
+    } catch {
+      // ignore
+    }
+    return
+  }
+
+  try {
+    // Negative PID targets the process group, so children are also killed.
+    process.kill(-pid, 'SIGKILL')
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // ignore
+    }
+  }
+}
 
 const getAgentsWorkCandidates = () => {
   const appPath = app.getAppPath()
@@ -427,7 +573,7 @@ const createWindow = () => {
   win.on('closed', () => {
     // Kill all terminals when window closes
     terminals.forEach((terminal) => {
-      terminal.kill()
+      forceKillTerminal(terminal)
     })
     terminals.clear()
   })
@@ -816,7 +962,10 @@ app.whenReady().then(() => {
         event.sender.send('ide:terminal-data', id, data)
       })
 
-      terminal.onExit(() => {
+      terminal.onExit((exit) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('ide:terminal-exit', id, exit.exitCode ?? 0)
+        }
         terminals.delete(id)
       })
 
@@ -838,14 +987,36 @@ app.whenReady().then(() => {
   ipcMain.on('ide:terminal-kill', (event, id: string) => {
     const terminal = terminals.get(id)
     if (terminal) {
-      terminal.kill()
+      forceKillTerminal(terminal)
       terminals.delete(id)
     }
   })
 
-  ipcMain.handle('ide:codex-commit', async (_event, prompt: string, cwd?: string) => {
+  ipcMain.handle('ide:codex-commit', async (_event, prompt: string, cwd?: string, provider?: 'codex' | 'claude') => {
     const target = cwd || app.getAppPath()
-    return runCodex(prompt, target)
+    const preferred = provider ?? 'codex'
+    const aiResult = await runCodex(prompt, target, preferred)
+    if (aiResult.ok) {
+      return aiResult
+    }
+
+    const directResult = await runDirectAutoCommit(target)
+    if (directResult.ok) {
+      const output = [
+        `[${preferred}] fallback activado por fallo de CLI`,
+        aiResult.error ? `CLI error: ${aiResult.error}` : '',
+        directResult.output ?? '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      return { ok: true, output }
+    }
+
+    return {
+      ok: false,
+      error: directResult.error || aiResult.error || `Auto-commit fallo (${preferred})`,
+      output: [aiResult.output ?? '', directResult.output ?? ''].filter(Boolean).join('\n'),
+    }
   })
 
   createWindow()

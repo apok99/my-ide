@@ -247,39 +247,38 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
                             </button>
                         ) : null}
 
-                        {editorFullscreen ? (
-                            <main className="relative h-full w-full overflow-hidden bg-[#1e1e1e]">
-                                {editor}
-                            </main>
-                        ) : (
-                            <>
-                                {/* Column 2: Terminal */}
-                                <section className="relative h-full w-full overflow-hidden border-r border-white/5 bg-[#0b0d12]">
-                                    {editorHidden ? (
-                                        <button
-                                            type="button"
-                                            className="absolute right-2 top-2 z-20 rounded border border-white/15 bg-black/40 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
-                                            onClick={() => setEditorHidden(false)}
-                                            title="Mostrar editor (Shift+W)"
-                                        >
-                                            Editor
-                                        </button>
-                                    ) : null}
-                                    {terminal}
-                                </section>
-
-                                {/* Resizer */}
-                                {!editorHidden ? (
-                                    <div
-                                        className="cursor-col-resize bg-[#1f1f1f] hover:bg-blue-500/40"
-                                        onPointerDown={handleTerminalPointerDown}
-                                        title="Redimensionar terminal/editor"
-                                    />
+                        <>
+                            {/* Column 2: Terminal - siempre montado para preservar estado */}
+                            <section
+                                className="relative h-full w-full overflow-hidden border-r border-white/5 bg-[#0b0d12]"
+                                style={editorFullscreen ? { display: 'none' } : undefined}
+                            >
+                                {editorHidden ? (
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-2 z-20 rounded border border-white/15 bg-black/40 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
+                                        onClick={() => setEditorHidden(false)}
+                                        title="Mostrar editor (Shift+W)"
+                                    >
+                                        Editor
+                                    </button>
                                 ) : null}
+                                {terminal}
+                            </section>
 
-                                {/* Column 3: Code Editor */}
-                                {!editorHidden ? (
-                                    <main className="relative h-full w-full overflow-hidden bg-[#1e1e1e]">
+                            {/* Resizer */}
+                            {!editorHidden && !editorFullscreen ? (
+                                <div
+                                    className="cursor-col-resize bg-[#1f1f1f] hover:bg-blue-500/40"
+                                    onPointerDown={handleTerminalPointerDown}
+                                    title="Redimensionar terminal/editor"
+                                />
+                            ) : null}
+
+                            {/* Column 3: Code Editor */}
+                            {!editorHidden ? (
+                                <main className="relative h-full w-full overflow-hidden bg-[#1e1e1e]">
+                                    {!editorFullscreen ? (
                                         <button
                                             type="button"
                                             className="absolute right-2 top-2 z-20 rounded border border-white/15 bg-black/40 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
@@ -288,11 +287,11 @@ export function Layout({ activityBar, sidePanel, editor, terminal }: LayoutProps
                                         >
                                             Hide
                                         </button>
-                                        {editor}
-                                    </main>
-                                ) : null}
-                            </>
-                        )}
+                                    ) : null}
+                                    {editor}
+                                </main>
+                            ) : null}
+                        </>
                     </div>
                 </div>
             </div>

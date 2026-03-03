@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('ide', {
     ipcRenderer.on('ide:terminal-data', listener)
     return () => ipcRenderer.removeListener('ide:terminal-data', listener)
   },
+  onTerminalExit: (callback) => {
+    const listener = (_event, id, exitCode) => callback(id, exitCode)
+    ipcRenderer.on('ide:terminal-exit', listener)
+    return () => ipcRenderer.removeListener('ide:terminal-exit', listener)
+  },
   searchInFiles: (rootPath, query) =>
     ipcRenderer.invoke('ide:search-in-files', rootPath, query),
   gitStatus: (rootPath) => ipcRenderer.invoke('ide:git-status', rootPath),
@@ -44,5 +49,6 @@ contextBridge.exposeInMainWorld('ide', {
   gitMergeBranch: (rootPath, name) =>
     ipcRenderer.invoke('ide:git-merge-branch', rootPath, name),
   openRemote: (remoteUrl) => ipcRenderer.invoke('ide:open-remote', remoteUrl),
-  codexCommit: (prompt, cwd) => ipcRenderer.invoke('ide:codex-commit', prompt, cwd),
+  codexCommit: (prompt, cwd, provider) =>
+    ipcRenderer.invoke('ide:codex-commit', prompt, cwd, provider),
 })

@@ -12,6 +12,7 @@ import { GitPanel } from './components/Git/GitPanel'
 import { KanbanPanel } from './components/Kanban/KanbanPanel'
 import { ProblemsPanel } from './components/Problems/ProblemsPanel'
 import { SettingsModal } from './components/Settings/SettingsModal'
+import { OpsPanel } from './components/Ops/OpsPanel'
 
 type ProjectState = {
   id: string
@@ -244,7 +245,7 @@ function App() {
   )
   const [paletteIndex, setPaletteIndex] = useState(0)
   const [paletteSearching, setPaletteSearching] = useState(false)
-  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'kanban'>('explorer')
+  const [sidePanel, setSidePanel] = useState<'explorer' | 'git' | 'kanban' | 'ops'>('explorer')
   const [problems, setProblems] = useState<ProblemItem[]>([])
   const [showProblems, setShowProblems] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
@@ -1335,7 +1336,7 @@ function App() {
     setCodexStatus('Ejecutando Codex: creando commit y push...')
     try {
       const result = await window.ide.codexCommit(
-        'Haz git add -A, crea un commit con un mensaje claro segun los cambios y haz git push.',
+        'Haz commit y push en la carpeta raiz actual. Si en la raiz no existe .git, revisa si existen las carpetas front y back, y en cada una que tenga .git haz git add -A, commit con un mensaje claro segun los cambios y git push. Si un repo no tiene cambios, indicarlo y continuar.',
         activeProject.rootPath,
       )
       updateProject(activeProject.id, (project) => ({
@@ -1395,7 +1396,7 @@ function App() {
 
   useEffect(() => {
     const savedPanel = localStorage.getItem(sidePanelKey)
-    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'kanban') {
+    if (savedPanel === 'git' || savedPanel === 'explorer' || savedPanel === 'kanban' || savedPanel === 'ops') {
       setSidePanel(savedPanel)
     }
   }, [])
@@ -1448,7 +1449,7 @@ function App() {
       }
       if (isMod && key === 'b') {
         event.preventDefault()
-        setSidePanel('agents')
+        setSidePanel('kanban')
         return
       }
       if (isMod && key === 't') {
@@ -1979,10 +1980,9 @@ function App() {
             </div>
           }
           terminal={
-            sidePanel === 'kanban' ? (
-              <KanbanPanel rootPath={activeProject?.rootPath ?? null} />
-            ) : (
-              <div className="h-full w-full">
+            <div className="relative h-full w-full">
+              {/* Terminals always mounted to preserve state */}
+              <div className={`h-full w-full ${sidePanel === 'kanban' || sidePanel === 'ops' ? 'hidden' : 'block'}`}>
                 {projects.length === 0 ? (
                   <TerminalManager isActive />
                 ) : (
@@ -1992,14 +1992,28 @@ function App() {
                       className={`h-full w-full ${project.id === activeProjectId ? 'block' : 'hidden'}`}
                     >
                       <TerminalManager
-                        isActive={project.id === activeProjectId}
+                        isActive={project.id === activeProjectId && sidePanel !== 'kanban' && sidePanel !== 'ops'}
                         rootPath={project.rootPath}
                       />
                     </div>
                   ))
                 )}
               </div>
-            )
+              {/* Kanban mounted per-project, overlaid on top */}
+              {sidePanel === 'kanban' && (
+                <div className="absolute inset-0 h-full w-full">
+                  <KanbanPanel
+                    key={activeProject?.rootPath ?? 'no-project'}
+                    rootPath={activeProject?.rootPath ?? null}
+                  />
+                </div>
+              )}
+              {sidePanel === 'ops' && (
+                <div className="absolute inset-0 h-full w-full">
+                  <OpsPanel rootPath={activeProject?.rootPath ?? null} />
+                </div>
+              )}
+            </div>
           }
         />
       </div>

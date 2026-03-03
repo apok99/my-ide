@@ -4,6 +4,8 @@ import { TerminalWindow } from './TerminalWindow'
 interface TerminalSession {
     id: string
     zIndex: number
+    title?: string
+    bootCommand?: string
 }
 
 interface CellDef {
@@ -232,17 +234,40 @@ interface TerminalManagerProps {
     rootPath?: string | null
 }
 
+interface TerminalRunRequest {
+    terminalId?: string
+    command: string
+    label?: string
+    rootPath?: string | null
+    background?: boolean
+}
+
+interface TerminalFocusRequest {
+    terminalId: string
+    rootPath?: string | null
+}
+
 export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
     const [terminals, setTerminals] = useState<TerminalSession[]>([])
     const [activeId, setActiveId] = useState<string | null>(null)
     const [selectedLayout, setSelectedLayout] = useState<LayoutConfig>(LAYOUTS[0])
 
-    const createTerminal = useCallback(() => {
+    const createTerminal = useCallback((options?: { id?: string; title?: string; bootCommand?: string; focus?: boolean }) => {
         setTerminals((prev) => {
             if (prev.length >= 12) return prev
-            const id = crypto.randomUUID()
-            setActiveId(id)
-            return [...prev, { id, zIndex: prev.length + 1 }]
+            const id = options?.id ?? crypto.randomUUID()
+            if (options?.focus ?? true) {
+                setActiveId(id)
+            }
+            return [
+                ...prev,
+                {
+                    id,
+                    zIndex: prev.length + 1,
+                    title: options?.title,
+                    bootCommand: options?.bootCommand,
+                },
+            ]
         })
     }, [])
 
@@ -261,7 +286,8 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
 
     useEffect(() => {
         if (!isActive) return
-        const handle = setTimeout(() => window.dispatchEvent(new Event('resize')), 0)
+        // Use a longer delay so the DOM is fully painted before re-fitting terminals
+        const handle = setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
         return () => clearTimeout(handle)
     }, [isActive])
 
@@ -285,6 +311,50 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
 
     const minRowH = selectedLayout.rows >= 4 ? 150 : selectedLayout.rows >= 3 ? 180 : selectedLayout.rows >= 2 ? 240 : 300
 
+    useEffect(() => {
+        const handleRunCommand = (event: Event) => {
+            const detail = (event as CustomEvent<TerminalRunRequest>).detail
+            if (!detail?.command) {
+                return
+            }
+            if (detail.rootPath) {
+                if (!rootPath || rootPath !== detail.rootPath) {
+                    return
+                }
+            }
+            createTerminal({
+                id: detail.terminalId,
+                title: detail.label ?? 'Task',
+                bootCommand: detail.command,
+                focus: detail.background ? false : true,
+            })
+        }
+
+        window.addEventListener('dms:terminal-run', handleRunCommand)
+        return () => window.removeEventListener('dms:terminal-run', handleRunCommand)
+    }, [createTerminal, rootPath])
+
+    useEffect(() => {
+        const handleFocusTerminal = (event: Event) => {
+            const detail = (event as CustomEvent<TerminalFocusRequest>).detail
+            if (!detail?.terminalId) {
+                return
+            }
+            if (detail.rootPath) {
+                if (!rootPath || rootPath !== detail.rootPath) {
+                    return
+                }
+            }
+            if (!terminals.some((item) => item.id === detail.terminalId)) {
+                return
+            }
+            focusTerminal(detail.terminalId)
+        }
+
+        window.addEventListener('dms:terminal-focus', handleFocusTerminal)
+        return () => window.removeEventListener('dms:terminal-focus', handleFocusTerminal)
+    }, [focusTerminal, rootPath, terminals])
+
     return (
         <div className="relative h-full w-full overflow-hidden bg-[#0b0d12] p-4 text-white">
             {/* Header / Controls */}
@@ -298,7 +368,7 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
                     <div className="h-4 w-px bg-white/10 mx-1" />
 
                     <button
-                        onClick={createTerminal}
+                        onClick={() => createTerminal()}
                         className="rounded-md bg-blue-600/20 px-3 py-1 text-xs font-semibold text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors disabled:opacity-50"
                         disabled={terminals.length >= 12}
                         title={terminals.length >= 12 ? 'Max 12 terminals' : 'New terminal'}
@@ -344,6 +414,8 @@ export function TerminalManager({ isActive, rootPath }: TerminalManagerProps) {
                                         onFocus={() => focusTerminal(term.id)}
                                         onClose={() => closeTerminal(term.id)}
                                         cwd={rootPath ?? undefined}
+                                        title={term.title ?? `zsh #${index + 1}`}
+                                        initialCommand={term.bootCommand}
                                     />
                                 </div>
                             )

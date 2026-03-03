@@ -42,6 +42,9 @@ declare global {
       onTerminalData: (
         callback: (terminalId: string, data: string) => void,
       ) => () => void
+      onTerminalExit: (
+        callback: (terminalId: string, exitCode: number) => void,
+      ) => () => void
       searchInFiles: (
         rootPath: string,
         query: string,
@@ -82,6 +85,7 @@ declare global {
       codexCommit: (
         prompt: string,
         cwd?: string,
+        provider?: 'codex' | 'claude',
       ) => Promise<{ ok: boolean; output?: string; error?: string }>
     }
   }

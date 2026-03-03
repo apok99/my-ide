@@ -34,7 +34,7 @@ const hotkeyGroups: HotkeyGroup[] = [
     title: 'Trabajo diario',
     items: [
       { keys: 'Cmd/Ctrl + S', action: 'Guardar archivo activo' },
-      { keys: 'Cmd/Ctrl + B', action: 'Ir al panel Agents' },
+      { keys: 'Cmd/Ctrl + B', action: 'Ir al panel Kanban' },
       { keys: 'Cmd/Ctrl + Shift + M', action: 'Mostrar/ocultar panel Problems' },
     ],
   },
